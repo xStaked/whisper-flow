@@ -59,24 +59,20 @@ final class TextInserter {
 
         // Verification is only trustworthy when the app exposes its text through
         // Accessibility. Web views usually do not; guessing there would duplicate text.
-        guard let before, before.valueLength != nil else {
-            Diagnostics.log("inserción: sin lectura del texto en destino, se asume éxito tras ⌘V")
+        // Web views often report a constant placeholder length (1, 14...) through
+        // AX. That is not a usable signal, so treat it as "cannot verify".
+        guard let before, let readable = before.valueLength, readable > 2 else {
+            Diagnostics.log("inserción: AX no reporta el texto real (\(before?.valueLength.map(String.init) ?? "nil")), se asume éxito tras ⌘V")
             return true
         }
         if waitForValueChange(from: before) {
-            let final = caretState()?.valueLength.map(String.init) ?? "?"
-            Diagnostics.log("inserción: verificada con ⌘V (largo final \(final), esperaba \(before.valueLength! + trimmed.utf16.count))")
+            Diagnostics.log("inserción: verificada con ⌘V")
             return true
         }
 
-        // 2. ⌘V was ignored: last resort, type the characters.
-        Diagnostics.log("inserción: ⌘V no cambió el texto, probando eventos Unicode")
-        let beforeTyping = caretState()
-        typeUnicode(trimmed)
-        if let beforeTyping, beforeTyping.valueLength != nil, waitForValueChange(from: beforeTyping) {
-            Diagnostics.log("inserción: verificada tipeando")
-            return true
-        }
+        // Nothing else is attempted on purpose. Typing after a paste that actually
+        // worked would append a second, half-delivered copy of the text — and with
+        // a broken AX value we cannot tell those two cases apart.
         return false
     }
 
@@ -126,38 +122,6 @@ final class TextInserter {
         if let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
             up.flags = .maskCommand
             up.post(tap: .cghidEventTap)
-        }
-    }
-
-    // MARK: Strategy 2 — unicode events
-
-    private func typeUnicode(_ text: String) {
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
-        let units = Array(text.utf16)
-        var index = 0
-
-        while index < units.count {
-            var end = min(index + 20, units.count)
-            // Never split a surrogate pair across two events.
-            if end < units.count, (0xD800...0xDBFF).contains(units[end - 1]) {
-                end -= 1
-            }
-            if end <= index { end = min(index + 2, units.count) }
-
-            let chunk = Array(units[index..<end])
-            chunk.withUnsafeBufferPointer { buffer in
-                guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) else { return }
-                down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
-                down.post(tap: .cghidEventTap)
-            }
-            // The matching keyUp is what stops macOS from folding every follow-up
-            // chunk into a single key-repeat and dropping it.
-            if let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
-                up.post(tap: .cghidEventTap)
-            }
-
-            index = end
-            usleep(60_000)
         }
     }
 
