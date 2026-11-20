@@ -27,6 +27,7 @@ swiftc -O -swift-version 5 \
     -framework AVFoundation \
     -framework ApplicationServices \
     -framework CoreGraphics \
+    -Xlinker -weak_framework -Xlinker FoundationModels \
     -o "$BIN" \
     "$ROOT/Sources/"*.swift
 
@@ -57,6 +58,7 @@ data = {
     "maxRecordSeconds": 120,
     "soundsEnabled": True,
     "autoInsert": True,
+    "postProcess": False,
 }
 with open(out, "w") as handle:
     json.dump(data, handle, indent=2)

@@ -126,6 +126,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Últimos dictados", action: #selector(openPanel), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Abrir permisos", action: #selector(openSetup), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Abrir carpeta de configuración", action: #selector(openConfigFolder), keyEquivalent: "").target = self
+
+        menu.addItem(NSMenuItem.separator())
+        let cleanupHeader = NSMenuItem(title: "Limpieza del texto", action: nil, keyEquivalent: "")
+        cleanupHeader.isEnabled = false
+        menu.addItem(cleanupHeader)
+
+        let offItem = NSMenuItem(title: "Desactivada", action: #selector(setCleanupOff), keyEquivalent: "")
+        offItem.target = self
+        offItem.state = config.postProcess ? .off : .on
+        menu.addItem(offItem)
+
+        let rulesItem = NSMenuItem(title: "Reglas (instantáneo)", action: #selector(setCleanupRules), keyEquivalent: "")
+        rulesItem.target = self
+        rulesItem.state = (config.postProcess && config.postProcessEngine.lowercased() != "llm") ? .on : .off
+        menu.addItem(rulesItem)
+
+        let llmItem = NSMenuItem(title: "IA local (+4s)", action: #selector(setCleanupLLM), keyEquivalent: "")
+        llmItem.target = self
+        llmItem.state = (config.postProcess && config.postProcessEngine.lowercased() == "llm") ? .on : .off
+        menu.addItem(llmItem)
         menu.addItem(withTitle: "Ver log de diagnóstico", action: #selector(openLog), keyEquivalent: "").target = self
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Salir de WhisperFlow", action: #selector(quit), keyEquivalent: "q").target = self
@@ -145,6 +165,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openLog() {
         NSWorkspace.shared.open(Diagnostics.logURL)
+    }
+
+    @objc private func setCleanupOff() { updateCleanup(enabled: false, engine: "rules") }
+    @objc private func setCleanupRules() { updateCleanup(enabled: true, engine: "rules") }
+    @objc private func setCleanupLLM() { updateCleanup(enabled: true, engine: "llm") }
+
+    private func updateCleanup(enabled: Bool, engine: String) {
+        config.postProcess = enabled
+        config.postProcessEngine = engine
+        Locator.save(config)
+        Diagnostics.log("config: limpieza = \(enabled ? engine : "off")")
     }
 
     @objc private func openSetup() {
@@ -268,7 +299,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             do {
-                let text = try transcriber.transcribe(recordingAt: audioURL)
+                let raw = try transcriber.transcribe(recordingAt: audioURL)
+                let text = self?.applyPostProcessing(raw) ?? raw
                 DispatchQueue.main.async {
                     self?.deliver(text)
                 }
@@ -299,6 +331,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard recorder.isRecording else { return }
         recorder.cancel()
         setState(.idle)
+    }
+
+    /// Optional on-device cleanup. Runs on the transcription queue so it never
+    /// touches the main thread or the hotkey.
+    private func applyPostProcessing(_ raw: String) -> String {
+        guard config.postProcess else { return raw }
+
+        // Short commands are already fine and latency matters more there.
+        let words = raw.split(whereSeparator: { $0.isWhitespace }).count
+        guard words >= config.postProcessMinWords else {
+            Diagnostics.log("llm: \(words) palabras (< \(config.postProcessMinWords)), se deja crudo")
+            return raw
+        }
+
+        if config.postProcessEngine.lowercased() == "llm" {
+            guard let cleaned = PostProcessor.clean(raw, config: config) else {
+                Diagnostics.log("llm: sin limpieza, uso texto crudo")
+                return raw
+            }
+            Diagnostics.log("llm: texto limpio (\(raw.count) -> \(cleaned.count) chars)")
+            return cleaned
+        }
+
+        let cleaned = RulesCleaner.clean(raw)
+        guard !cleaned.isEmpty else { return raw }
+        Diagnostics.log("reglas: texto limpio (\(raw.count) -> \(cleaned.count) chars)")
+        return cleaned
     }
 
     private func deliver(_ text: String) {
