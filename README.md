@@ -18,7 +18,7 @@ mantén fn ──► graba ──► whisper.cpp local ──► [limpieza opcio
 | `Sources/FnKeyMonitor.swift` | Escucha `fn` con un event tap de bajo nivel y lo traga para que macOS no abra el emoji picker. Otra tecla mientras `fn` está presionada = cancela. |
 | `Sources/AudioRecorder.swift` | `AVAudioEngine` (uno nuevo por grabación) → samples en memoria → WAV 16-bit mono. |
 | `Sources/Transcriber.swift` | `ffmpeg` a 16 kHz + `whisper-cli` + limpieza de alucinaciones. Timeouts duros. |
-| `Sources/TextInserter.swift` | Escribe al cursor con eventos Unicode; si no se puede verificar, cae a portapapeles + ⌘V. |
+| `Sources/TextInserter.swift` | Escribe al cursor tipeando eventos Unicode (sin tocar el portapapeles); si el destino los ignora, cae a ⌘V. |
 | `Sources/RulesCleaner.swift` | Limpieza instantánea: quita muletillas, arregla espacios, mayúsculas y punto final. |
 | `Sources/LlamaEngine.swift` | Limpieza con LLM local (llama.cpp + Metal). |
 | `Sources/PostProcessor.swift` | Cadena de limpieza: Apple Intelligence → llama.cpp → texto crudo, con salvaguardas. |

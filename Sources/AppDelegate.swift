@@ -138,6 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showContextMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: "Últimos dictados", action: #selector(openPanel), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Re-insertar último dictado", action: #selector(reinsertLast), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Abrir permisos", action: #selector(openSetup), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Abrir carpeta de configuración", action: #selector(openConfigFolder), keyEquivalent: "").target = self
 
@@ -173,6 +174,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
+    }
+
+    /// Retry insertion from history without re-dictating — handy when the target
+    /// app was not focused the first time.
+    @objc private func reinsertLast() {
+        guard let text = store.entries.first?.text else {
+            NSSound.beep()
+            return
+        }
+        let inserted = inserter.insert(text)
+        Diagnostics.log("reinsertar: \(inserted ? "verificada" : "falló")")
+        if !inserted {
+            inserter.copyToClipboard(text)
+            if config.showOverlay { hud.showCopied() }
+        }
     }
 
     @objc private func openPanel() {
