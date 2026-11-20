@@ -11,6 +11,11 @@ struct AppConfig: Codable {
     var maxRecordSeconds: Double
     var soundsEnabled: Bool
     var autoInsert: Bool
+    var postProcess: Bool
+    var postProcessEngine: String
+    var llmBinaryPath: String
+    var llmModelPath: String
+    var postProcessMinWords: Int
 
     static let fallback = AppConfig(
         language: "auto",
@@ -19,7 +24,12 @@ struct AppConfig: Codable {
         ffmpegPath: "/opt/homebrew/bin/ffmpeg",
         maxRecordSeconds: 120,
         soundsEnabled: true,
-        autoInsert: true
+        autoInsert: true,
+        postProcess: false,
+        postProcessEngine: "rules",
+        llmBinaryPath: "",
+        llmModelPath: "",
+        postProcessMinWords: 12
     )
 
     init(language: String,
@@ -28,7 +38,12 @@ struct AppConfig: Codable {
          ffmpegPath: String,
          maxRecordSeconds: Double,
          soundsEnabled: Bool,
-         autoInsert: Bool) {
+         autoInsert: Bool,
+         postProcess: Bool,
+         postProcessEngine: String,
+         llmBinaryPath: String,
+         llmModelPath: String,
+         postProcessMinWords: Int) {
         self.language = language
         self.modelPath = modelPath
         self.whisperBinaryPath = whisperBinaryPath
@@ -36,6 +51,11 @@ struct AppConfig: Codable {
         self.maxRecordSeconds = maxRecordSeconds
         self.soundsEnabled = soundsEnabled
         self.autoInsert = autoInsert
+        self.postProcess = postProcess
+        self.postProcessEngine = postProcessEngine
+        self.llmBinaryPath = llmBinaryPath
+        self.llmModelPath = llmModelPath
+        self.postProcessMinWords = postProcessMinWords
     }
 
     // Tolerant decoding: a hand-edited config with a missing key must not crash the app.
@@ -49,6 +69,11 @@ struct AppConfig: Codable {
         maxRecordSeconds = (try? c.decode(Double.self, forKey: .maxRecordSeconds)) ?? f.maxRecordSeconds
         soundsEnabled = (try? c.decode(Bool.self, forKey: .soundsEnabled)) ?? f.soundsEnabled
         autoInsert = (try? c.decode(Bool.self, forKey: .autoInsert)) ?? f.autoInsert
+        postProcess = (try? c.decode(Bool.self, forKey: .postProcess)) ?? f.postProcess
+        postProcessEngine = (try? c.decode(String.self, forKey: .postProcessEngine)) ?? f.postProcessEngine
+        llmBinaryPath = (try? c.decode(String.self, forKey: .llmBinaryPath)) ?? f.llmBinaryPath
+        llmModelPath = (try? c.decode(String.self, forKey: .llmModelPath)) ?? f.llmModelPath
+        postProcessMinWords = (try? c.decode(Int.self, forKey: .postProcessMinWords)) ?? f.postProcessMinWords
     }
 }
 
@@ -151,6 +176,55 @@ enum Locator {
         if cfg.modelPath.isEmpty || !FileManager.default.fileExists(atPath: cfg.modelPath) {
             cfg.modelPath = findModel() ?? ""
         }
+
+        if cfg.llmBinaryPath.isEmpty || !FileManager.default.isExecutableFile(atPath: cfg.llmBinaryPath) {
+            cfg.llmBinaryPath = findLlamaBinary() ?? ""
+        }
+
+        if cfg.llmModelPath.isEmpty || !FileManager.default.fileExists(atPath: cfg.llmModelPath) {
+            cfg.llmModelPath = findLlamaModel() ?? ""
+        }
+    }
+
+    private static func findLlamaBinary() -> String? {
+        let fm = FileManager.default
+        for root in searchRoots {
+            for name in ["llama-completion", "llama-cli"] {
+                let direct = [root.appendingPathComponent(name),
+                              root.appendingPathComponent("vendor-llama/\(name)"),
+                              root.appendingPathComponent("Resources/\(name)")]
+                for candidate in direct where fm.isExecutableFile(atPath: candidate.path) {
+                    return candidate.path
+                }
+            }
+            // vendor-llama/llama-<build>/llama-cli
+            let vendor = root.appendingPathComponent("vendor-llama")
+            let entries = (try? fm.contentsOfDirectory(atPath: vendor.path)) ?? []
+            for entry in entries.sorted(by: >) {
+                for name in ["llama-completion", "llama-cli"] {
+                    let candidate = vendor.appendingPathComponent(entry).appendingPathComponent(name)
+                    if fm.isExecutableFile(atPath: candidate.path) { return candidate.path }
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func findLlamaModel() -> String? {
+        let fm = FileManager.default
+        var candidates: [URL] = []
+        for root in searchRoots {
+            candidates.append(root.appendingPathComponent("models"))
+        }
+        for dir in candidates {
+            let files = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+            let ggufs = files.filter { $0.lowercased().hasSuffix(".gguf") }
+            if let instruct = ggufs.first(where: { $0.lowercased().contains("instruct") }) {
+                return dir.appendingPathComponent(instruct).path
+            }
+            if let any = ggufs.first { return dir.appendingPathComponent(any).path }
+        }
+        return nil
     }
 
     private static func findModel() -> String? {

@@ -4,3 +4,4 @@ vendor-whisper/
 vendor/
 build/
 *.aiff
+vendor-llama/

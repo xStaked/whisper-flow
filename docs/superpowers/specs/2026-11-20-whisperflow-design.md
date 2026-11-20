@@ -111,3 +111,55 @@ WhisperFlow/
 - La app arranca, resuelve rutas y escribe `config.json` correctamente.
 - Pendiente de prueba manual: hotkey `fn` real, permisos TCC, inserción en apps
   de terceros (requiere interacción humana).
+
+---
+
+# Anexo: limpieza del texto con IA (v0.2.0)
+
+## Objetivo
+
+Wispr Flow no solo transcribe: pasa el texto por un LLM que quita muletillas,
+arregla puntuación y separa oraciones. Se quería lo mismo, local.
+
+## Hallazgo: Apple Intelligence no está disponible
+
+`FoundationModels.framework` existe en macOS 26, pero al consultar
+`SystemLanguageModel.default.availability` devuelve
+`appleIntelligenceNotEnabled`: el modelo on-device está apagado y en la región
+del usuario no está habilitado. El código quedó escrito y se usa solo si algún
+día está disponible; no es el camino principal.
+
+## Decisión: llama.cpp con modelo GGUF
+
+- Binario precompilado oficial (`llama-b12589-bin-macos-arm64`), que **sí trae
+  Metal** — a diferencia de whisper.cpp, que en esta máquina hubo que compilar
+  sin GPU por falta del compilador de shaders.
+- Modelo `Qwen2.5-3B-Instruct-Q4_K_M` (~1.8 GB): buen español, sigue
+  instrucciones y conserva números/vocabulario técnico.
+- Se invoca `llama-completion` (no `llama-cli`) con el template ChatML armado a
+  mano: así stdout es solo la respuesta, sin banner ni bucle interactivo.
+- `PostProcessor.sanitize` descarta la salida si difiere demasiado del original
+  (menos de la mitad o más del doble de palabras), si viene vacía o si trae
+  preámbulos tipo "Aquí está el texto limpio:". En ese caso gana el texto crudo.
+
+## Por qué hay dos motores
+
+Cargar 1.8 GB cuesta **~4.5 s** por dictado (medido: GPU 4.6 s, CPU 6.1 s, con
+solo 0.3 s de diferencia entre cargar y generar). Eso es demasiado para el uso
+normal, así que:
+
+- **Reglas** (`RulesCleaner`): regex determinista, <10 ms, sin modelos. Quita
+  `eh/um/mmm`, corrige espacios, mayúsculas y punto final. No reescribe.
+- **IA local**: la limpieza real, opt-in, para dictados largos.
+
+Se descartó mantener un `llama-server` residente: daría ~1 s por dictado pero
+dejaría ~2.5 GB de RAM ocupados en reposo, justo lo contrario del diseño.
+
+## Verificación
+
+- `llama-completion` con template ChatML: quitó "pues"/"o sea", puso puntuación
+  y separó oraciones sin alterar los números (29.5 / 13.5 / 18.5 / 40 / 60).
+- `RulesCleaner`: "eh hola  eh  como estas ,  quiero..." → "Hola como estas,
+  quiero...".
+- La app arrancó tras recompilar con **los permisos intactos**, gracias a firmar
+  con el certificado Apple Development en vez de ad-hoc.
