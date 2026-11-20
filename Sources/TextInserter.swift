@@ -52,27 +52,29 @@ final class TextInserter {
         Diagnostics.log("inserción: foco=[\(focusDescription())] appActiva=\(NSApp.isActive)")
         Diagnostics.log("inserción: destino=\(destination) caret=\(before?.caret.map(String.init) ?? "-") valor=\(before?.valueLength.map(String.init) ?? "-")")
 
-        // 1. Type the characters. This needs no clipboard, so it can never paste
-        //    whatever the user had copied before — and it works in Electron.
-        typeUnicode(trimmed)
+        // 1. Atomic paste. Synthetic unicode typing only ever delivers its first
+        //    chunk on macOS 26 (the rest gets swallowed), so a single ⌘V is the only
+        //    way to be sure the whole text arrives at once.
+        pasteViaClipboard(trimmed)
 
         // Verification is only trustworthy when the app exposes its text through
         // Accessibility. Web views usually do not; guessing there would duplicate text.
         guard let before, before.valueLength != nil else {
-            Diagnostics.log("inserción: sin lectura del texto en destino, se asume éxito al tipear")
+            Diagnostics.log("inserción: sin lectura del texto en destino, se asume éxito tras ⌘V")
             return true
         }
         if waitForValueChange(from: before) {
-            Diagnostics.log("inserción: verificada tipeando")
+            let final = caretState()?.valueLength.map(String.init) ?? "?"
+            Diagnostics.log("inserción: verificada con ⌘V (largo final \(final), esperaba \(before.valueLength! + trimmed.utf16.count))")
             return true
         }
 
-        // 2. Typing was ignored (some sandboxed apps): fall back to ⌘V.
-        Diagnostics.log("inserción: tipear no cambió el texto, probando ⌘V")
-        let beforePaste = caretState()
-        pasteViaClipboard(trimmed)
-        if let beforePaste, beforePaste.valueLength != nil, waitForValueChange(from: beforePaste) {
-            Diagnostics.log("inserción: verificada con ⌘V")
+        // 2. ⌘V was ignored: last resort, type the characters.
+        Diagnostics.log("inserción: ⌘V no cambió el texto, probando eventos Unicode")
+        let beforeTyping = caretState()
+        typeUnicode(trimmed)
+        if let beforeTyping, beforeTyping.valueLength != nil, waitForValueChange(from: beforeTyping) {
+            Diagnostics.log("inserción: verificada tipeando")
             return true
         }
         return false
@@ -155,7 +157,7 @@ final class TextInserter {
             }
 
             index = end
-            usleep(8_000)
+            usleep(60_000)
         }
     }
 
