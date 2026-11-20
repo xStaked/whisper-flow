@@ -26,16 +26,31 @@ final class TextInserter {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
 
+        // If any of our own windows took focus, keystrokes would land in our app
+        // instead of yours. Step out of the way first.
+        if NSApp.isActive {
+            Diagnostics.log("inserción: la app estaba activa, cediendo el foco")
+            NSApp.hide(nil)
+            usleep(150_000)
+        }
+
+        let destination = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "desconocida"
         let before = caretSignature()
+        Diagnostics.log("inserción: destino=\(destination) caret=\(before.map(String.init) ?? "sin AX")")
+
         typeUnicode(trimmed)
 
         if let before, waitForCaretChange(from: before) { return true }
-        if before == nil { return true } // cannot verify — assume it worked
+        if before == nil {
+            // The target app does not expose its caret (web views, Electron). No way
+            // to verify, and false positives are worse than assuming success.
+            Diagnostics.log("inserción: sin AX, se asume éxito")
+            return true
+        }
 
-        // Fallback: clipboard paste.
-        let snapshot = before
+        Diagnostics.log("inserción: los eventos Unicode no movieron el caret, probando ⌘V")
         pasteViaClipboard(trimmed)
-        if let snapshot, waitForCaretChange(from: snapshot) { return true }
+        if let snapshot = before, waitForCaretChange(from: snapshot) { return true }
         return false
     }
 
@@ -136,8 +151,8 @@ final class TextInserter {
     }
 
     private func waitForCaretChange(from signature: Int) -> Bool {
-        for _ in 0..<8 {
-            usleep(40_000)
+        for _ in 0..<12 {
+            usleep(50_000)
             if let current = caretSignature(), current != signature {
                 return true
             }

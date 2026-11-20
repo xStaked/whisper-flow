@@ -25,7 +25,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let panel = TranscriptPanelController()
     private let setup = SetupWindowController()
     private let hud = OverlayHUD()
-    private let fallback = FallbackWindowController()
 
     // MARK: - Lifecycle
 
@@ -67,6 +66,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.startMonitor()
                 self?.setState(.idle)
             }
+        } else {
+            // `open` (and Login Items) can leave us as the active app. With no
+            // windows that means keystrokes have nowhere to land, so give focus back.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                let hasVisibleWindow = NSApp.windows.contains { $0.isVisible }
+                if NSApp.isActive, !hasVisibleWindow {
+                    Diagnostics.log("arranque: quedé activa sin ventanas, cediendo el foco")
+                    NSApp.hide(nil)
+                }
+            }
         }
 
         // Self-healing: macOS can disable a tap (sleep, device changes, timeouts).
@@ -80,12 +89,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if !self.monitor.isEnabled {
                 Diagnostics.log("salud: tap deshabilitado, reactivando")
                 self.monitor.reenable()
-            }
-        }
-
-        if ProcessInfo.processInfo.environment["WHISPERFLOW_TEST_FALLBACK"] == "1" {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.fallback.present("Este es un texto de prueba del fallback. Seleccionalo y copialo con ⌘C.")
             }
         }
 
@@ -407,13 +410,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if inserted {
                 hud.showSuccess()
             } else {
-                hud.showWarning("revisá la ventana")
+                hud.showWarning("no se pudo pegar")
             }
         }
 
         if !inserted {
-            // Could not verify the text landed — give an editable box so ⌘C works.
-            fallback.present(text)
+            // Never open a window here: activating would steal focus and the next
+            // dictation would be typed into our own app instead of yours.
+            inserter.copyToClipboard(text)
+            Diagnostics.log("inserción fallida: texto copiado al portapapeles")
+            if config.showOverlay { hud.showCopied() }
         }
     }
 
