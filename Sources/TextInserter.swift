@@ -3,13 +3,22 @@ import ApplicationServices
 
 /// Types text into whatever app currently has focus.
 ///
-/// Two strategies, in order of preference:
-///   1. Unicode CGEvent typing — leaves the clipboard untouched.
-///   2. Clipboard + ⌘V — slower and clobbers the clipboard briefly, but works
-///      in apps that ignore synthesised unicode (some Electron/web views).
+/// Order of attack:
+///   1. Clipboard + ⌘V — atomic. Web views and Electron only need one event, so
+///      there is no chance of half the text arriving.
+///   2. Unicode key events — for apps where ⌘V is disabled. Each chunk is a
+///      keyDown/keyUp pair: consecutive keyDowns with the same virtual key are
+///      interpreted as key-repeat and silently dropped.
 ///
-/// If neither can be verified, the caller opens the panel so the text is never lost.
+/// Verification reads the caret/value through Accessibility. Electron apps are
+/// famously unable to report their caret, so "cannot read it" must never be
+/// treated as failure.
 final class TextInserter {
+
+    private struct CaretState: Equatable {
+        let caret: Int?
+        let valueLength: Int?
+    }
 
     // MARK: Permissions
 
@@ -26,8 +35,7 @@ final class TextInserter {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
 
-        // If any of our own windows took focus, keystrokes would land in our app
-        // instead of yours. Step out of the way first.
+        // If one of our own windows is key, keystrokes would land in our app.
         if NSApp.isActive {
             Diagnostics.log("inserción: la app estaba activa, cediendo el foco")
             NSApp.hide(nil)
@@ -35,22 +43,32 @@ final class TextInserter {
         }
 
         let destination = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "desconocida"
-        let before = caretSignature()
-        Diagnostics.log("inserción: destino=\(destination) caret=\(before.map(String.init) ?? "sin AX")")
+        let before = caretState()
+        Diagnostics.log("inserción: destino=\(destination) caret=\(before?.caret.map(String.init) ?? "-") valor=\(before?.valueLength.map(String.init) ?? "-")")
 
-        typeUnicode(trimmed)
+        // 1. Atomic paste: one event, so the text can never arrive half-written.
+        pasteViaClipboard(trimmed)
 
-        if let before, waitForCaretChange(from: before) { return true }
-        if before == nil {
-            // The target app does not expose its caret (web views, Electron). No way
-            // to verify, and false positives are worse than assuming success.
-            Diagnostics.log("inserción: sin AX, se asume éxito")
+        // Verification is only trustworthy when the app exposes its text through
+        // Accessibility. Web views and Electron usually do not — guessing would
+        // mean typing a second copy on top of a successful paste.
+        guard let before, before.valueLength != nil else {
+            Diagnostics.log("inserción: sin lectura del texto en destino, se asume éxito tras ⌘V")
+            return true
+        }
+        if waitForValueChange(from: before) {
+            Diagnostics.log("inserción: verificada con ⌘V")
             return true
         }
 
-        Diagnostics.log("inserción: los eventos Unicode no movieron el caret, probando ⌘V")
-        pasteViaClipboard(trimmed)
-        if let snapshot = before, waitForCaretChange(from: snapshot) { return true }
+        // 2. ⌘V genuinely did nothing (blocked/disabled): type the characters.
+        Diagnostics.log("inserción: ⌘V no cambió el texto, probando eventos Unicode")
+        let beforeTyping = caretState()
+        typeUnicode(trimmed)
+        if let beforeTyping, beforeTyping.valueLength != nil, waitForValueChange(from: beforeTyping) {
+            Diagnostics.log("inserción: verificada con eventos Unicode")
+            return true
+        }
         return false
     }
 
@@ -60,7 +78,46 @@ final class TextInserter {
         pasteboard.setString(text, forType: .string)
     }
 
-    // MARK: Strategy 1 — unicode events
+    // MARK: Strategy 1 — clipboard paste
+
+    private func pasteViaClipboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.string(forType: .string)
+
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+
+        // Give the pasteboard a beat to publish before the target asks for it.
+        usleep(30_000)
+
+        postCommandV()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            // Only restore if our text is still there; never clobber a fresh copy.
+            guard pasteboard.string(forType: .string) == text else { return }
+            if let saved {
+                pasteboard.clearContents()
+                pasteboard.setString(saved, forType: .string)
+            }
+        }
+    }
+
+    private func postCommandV() {
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+        let vKey: CGKeyCode = 0x09
+
+        if let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true) {
+            down.flags = .maskCommand
+            down.post(tap: .cghidEventTap)
+        }
+        usleep(8_000)
+        if let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
+            up.flags = .maskCommand
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
+    // MARK: Strategy 2 — unicode events
 
     private func typeUnicode(_ text: String) {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
@@ -77,48 +134,24 @@ final class TextInserter {
 
             let chunk = Array(units[index..<end])
             chunk.withUnsafeBufferPointer { buffer in
-                guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) else { return }
-                event.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
-                event.post(tap: .cghidEventTap)
+                guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) else { return }
+                down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+                down.post(tap: .cghidEventTap)
             }
+            // The matching keyUp is what stops macOS from folding every follow-up
+            // chunk into a single key-repeat and dropping it.
+            if let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
+                up.post(tap: .cghidEventTap)
+            }
+
             index = end
-            usleep(4_000)
-        }
-    }
-
-    // MARK: Strategy 2 — clipboard paste
-
-    private func pasteViaClipboard(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        let saved = pasteboard.string(forType: .string)
-
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
-        let vKey: CGKeyCode = 0x09 // V
-
-        if let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true) {
-            down.flags = .maskCommand
-            down.post(tap: .cghidEventTap)
-        }
-        if let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
-            up.flags = .maskCommand
-            up.post(tap: .cghidEventTap)
-        }
-
-        // Give the target app time to read the pasteboard before restoring it.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            if let saved {
-                pasteboard.clearContents()
-                pasteboard.setString(saved, forType: .string)
-            }
+            usleep(8_000)
         }
     }
 
     // MARK: Verification via Accessibility
 
-    private func caretSignature() -> Int? {
+    private func caretState() -> CaretState? {
         guard AXIsProcessTrusted() else { return nil }
         let system = AXUIElementCreateSystemWide()
         var focusedRef: CFTypeRef?
@@ -129,6 +162,7 @@ final class TextInserter {
         }
         let element = focusedRef as! AXUIElement
 
+        var caret: Int?
         var rangeRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
            let rangeRef,
@@ -137,23 +171,28 @@ final class TextInserter {
             if AXValueGetType(value) == .cfRange {
                 var range = CFRange()
                 if AXValueGetValue(value, .cfRange, &range) {
-                    return range.location + range.length
+                    caret = range.location + range.length
                 }
             }
         }
 
+        var valueLength: Int?
         var valueRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
            let text = valueRef as? String {
-            return text.utf16.count
+            valueLength = text.utf16.count
         }
-        return nil
+
+        guard caret != nil || valueLength != nil else { return nil }
+        return CaretState(caret: caret, valueLength: valueLength)
     }
 
-    private func waitForCaretChange(from signature: Int) -> Bool {
-        for _ in 0..<12 {
+    private func waitForValueChange(from previous: CaretState) -> Bool {
+        guard let old = previous.valueLength else { return false }
+        for _ in 0..<14 {
             usleep(50_000)
-            if let current = caretSignature(), current != signature {
+            guard let current = caretState() else { continue }
+            if let new = current.valueLength, new != old {
                 return true
             }
         }
