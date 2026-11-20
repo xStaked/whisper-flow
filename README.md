@@ -73,6 +73,24 @@ cuando ambos están concedidos.
 
 Icono: micrófono = listo · rojo = grabando · naranja = transcribiendo.
 
+## Indicador en pantalla
+
+Mientras dictás aparece una píldora abajo al centro (100 px sobre el Dock):
+
+```
+╭──────────────────────────╮
+│ 🎙  ▁▃▅▇▅▃▁▂▄▆▄▂   0:07  │   grabando
+╰──────────────────────────╯
+```
+
+- **El waveform es tu voz real** (RMS del micrófono), no una animación decorativa.
+- **Cronómetro**, útil en dictados largos y para saber cuánto falta al corte de 120 s.
+- Al soltar cambia a `transcribiendo…`, después `✓ insertado` (o `revisá el panel`)
+  y desaparece solo.
+- Es **click-through y no activante**: los clics lo atraviesan y nunca roba el foco,
+  así el texto siempre cae en la app correcta. Funciona en fullscreen y en todos los Spaces.
+- Se apaga en **clic derecho → Indicador en pantalla** (o `showOverlay: false`).
+
 ## Limpieza del texto (opcional)
 
 Clic derecho → **Limpieza del texto**:
@@ -106,6 +124,7 @@ a otro `.gguf` y reinicia.
 | `postProcess` | `false` | Interruptor de limpieza (el menú lo cambia en vivo). |
 | `postProcessEngine` | `"rules"` | `"rules"` o `"llm"`. |
 | `postProcessMinWords` | `12` | Mínimo de palabras para aplicar IA. |
+| `showOverlay` | `true` | Indicador flotante en pantalla. |
 | `llmModelPath` | `models/Qwen2.5-3B-Instruct-Q4_K_M.gguf` | Modelo de limpieza. |
 | `llmBinaryPath` | `vendor-llama/*/llama-completion` | Runtime de llama.cpp. |
 | `maxRecordSeconds` | `120` | Corta sola si te olvidas soltar. |

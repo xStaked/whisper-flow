@@ -13,6 +13,7 @@ struct AppConfig: Codable {
     var autoInsert: Bool
     var postProcess: Bool
     var postProcessEngine: String
+    var showOverlay: Bool
     var llmBinaryPath: String
     var llmModelPath: String
     var postProcessMinWords: Int
@@ -27,6 +28,7 @@ struct AppConfig: Codable {
         autoInsert: true,
         postProcess: false,
         postProcessEngine: "rules",
+        showOverlay: true,
         llmBinaryPath: "",
         llmModelPath: "",
         postProcessMinWords: 12
@@ -41,6 +43,7 @@ struct AppConfig: Codable {
          autoInsert: Bool,
          postProcess: Bool,
          postProcessEngine: String,
+         showOverlay: Bool,
          llmBinaryPath: String,
          llmModelPath: String,
          postProcessMinWords: Int) {
@@ -53,6 +56,7 @@ struct AppConfig: Codable {
         self.autoInsert = autoInsert
         self.postProcess = postProcess
         self.postProcessEngine = postProcessEngine
+        self.showOverlay = showOverlay
         self.llmBinaryPath = llmBinaryPath
         self.llmModelPath = llmModelPath
         self.postProcessMinWords = postProcessMinWords
@@ -71,6 +75,7 @@ struct AppConfig: Codable {
         autoInsert = (try? c.decode(Bool.self, forKey: .autoInsert)) ?? f.autoInsert
         postProcess = (try? c.decode(Bool.self, forKey: .postProcess)) ?? f.postProcess
         postProcessEngine = (try? c.decode(String.self, forKey: .postProcessEngine)) ?? f.postProcessEngine
+        showOverlay = (try? c.decode(Bool.self, forKey: .showOverlay)) ?? f.showOverlay
         llmBinaryPath = (try? c.decode(String.self, forKey: .llmBinaryPath)) ?? f.llmBinaryPath
         llmModelPath = (try? c.decode(String.self, forKey: .llmModelPath)) ?? f.llmModelPath
         postProcessMinWords = (try? c.decode(Int.self, forKey: .postProcessMinWords)) ?? f.postProcessMinWords

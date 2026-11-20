@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let inserter = TextInserter()
     private let panel = TranscriptPanelController()
     private let setup = SetupWindowController()
+    private let hud = OverlayHUD()
 
     // MARK: - Lifecycle
 
@@ -49,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         recorder.onAutoStop = { [weak self] in
             self?.finishRecording()
+        }
+        recorder.onLevel = { [weak self] level in
+            self?.hud.update(level: level)
         }
 
         AudioRecorder.requestPermission { _ in }
@@ -146,6 +150,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         llmItem.target = self
         llmItem.state = (config.postProcess && config.postProcessEngine.lowercased() == "llm") ? .on : .off
         menu.addItem(llmItem)
+
+        menu.addItem(NSMenuItem.separator())
+        let hudItem = NSMenuItem(title: "Indicador en pantalla", action: #selector(toggleOverlay), keyEquivalent: "")
+        hudItem.target = self
+        hudItem.state = config.showOverlay ? .on : .off
+        menu.addItem(hudItem)
         menu.addItem(withTitle: "Ver log de diagnóstico", action: #selector(openLog), keyEquivalent: "").target = self
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Salir de WhisperFlow", action: #selector(quit), keyEquivalent: "q").target = self
@@ -165,6 +175,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openLog() {
         NSWorkspace.shared.open(Diagnostics.logURL)
+    }
+
+    @objc private func toggleOverlay() {
+        config.showOverlay.toggle()
+        Locator.save(config)
+        Diagnostics.log("config: overlay = \(config.showOverlay)")
+        if !config.showOverlay { hud.hide() }
     }
 
     @objc private func setCleanupOff() { updateCleanup(enabled: false, engine: "rules") }
@@ -260,12 +277,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try recorder.start(maxSeconds: config.maxRecordSeconds)
             Diagnostics.log("grabación: empezó")
+            if config.showOverlay { hud.showRecording() }
             playSound("Tink")
             setState(.recording)
         } catch {
             Diagnostics.log("grabación: error \(error.localizedDescription)")
             NSSound.beep()
             setState(.idle)
+            if config.showOverlay { hud.showError("no se pudo grabar") }
             presentError(error)
         }
     }
@@ -283,6 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         playSound("Pop")
+        if config.showOverlay { hud.showTranscribing() }
         Diagnostics.log("grabación: terminó (\(String(format: "%.1f", capture.durationSeconds))s), transcribiendo")
         setState(.transcribing)
         isBusy = true
@@ -331,6 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard recorder.isRecording else { return }
         recorder.cancel()
         setState(.idle)
+        hud.hide()
     }
 
     /// Optional on-device cleanup. Runs on the transcription queue so it never
@@ -374,6 +395,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isBusy = false
         setState(.idle)
+
+        if config.showOverlay {
+            if inserted {
+                hud.showSuccess()
+            } else {
+                hud.showWarning("revisá el panel")
+            }
+        }
 
         if !inserted {
             // Could not verify the text landed in the app — show it so it can be copied.
@@ -424,6 +453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentError(_ error: Error) {
         panel.show(store: store, error: "⚠️ \(error.localizedDescription)")
+        if config.showOverlay { hud.showError("error al transcribir") }
     }
 
     private func presentPermissionAlert(title: String, message: String) {
