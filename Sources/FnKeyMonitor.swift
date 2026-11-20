@@ -21,10 +21,23 @@ final class FnKeyMonitor {
 
     var isRunning: Bool { tap != nil }
 
+    var isEnabled: Bool {
+        guard let tap else { return false }
+        return CGEvent.tapIsEnabled(tap: tap)
+    }
+
+    func reenable() {
+        guard let tap else { return }
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
     @discardableResult
     func start() -> Bool {
         guard tap == nil else { return true }
-        guard AXIsProcessTrusted() else { return false }
+        guard AXIsProcessTrusted() else {
+            Diagnostics.log("tap: NO instalado (sin permiso de accesibilidad)")
+            return false
+        }
 
         let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
         guard let tap = CGEvent.tapCreate(
@@ -35,6 +48,7 @@ final class FnKeyMonitor {
             callback: fnEventCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
+            Diagnostics.log("tap: CGEvent.tapCreate devolvió nil")
             return false
         }
 
@@ -43,6 +57,7 @@ final class FnKeyMonitor {
         self.source = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        Diagnostics.log("tap: instalado correctamente")
         return true
     }
 
@@ -61,10 +76,11 @@ final class FnKeyMonitor {
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            Diagnostics.log("tap: deshabilitado (\(type == .tapDisabledByTimeout ? "timeout" : "user input")), reintentando")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             if fnHeld {
                 fnHeld = false
-                onCancel?()
+                DispatchQueue.main.async { [weak self] in self?.onCancel?() }
             }
             return Unmanaged.passUnretained(event)
 
@@ -72,12 +88,14 @@ final class FnKeyMonitor {
             let holding = event.flags.contains(.maskSecondaryFn)
             if holding && !fnHeld {
                 fnHeld = true
-                onPress?()
+                // Never do real work inside the tap callback: a slow callback makes
+                // macOS disable the tap ("tapDisabledByTimeout") and the hotkey dies.
+                DispatchQueue.main.async { [weak self] in self?.onPress?() }
                 return nil // swallow so macOS does not open the emoji picker
             }
             if !holding && fnHeld {
                 fnHeld = false
-                onRelease?()
+                DispatchQueue.main.async { [weak self] in self?.onRelease?() }
                 return nil
             }
             return Unmanaged.passUnretained(event)
@@ -87,7 +105,7 @@ final class FnKeyMonitor {
                 let code = event.getIntegerValueField(.keyboardEventKeycode)
                 if code != Self.fnKeyCode {
                     fnHeld = false
-                    onCancel?()
+                    DispatchQueue.main.async { [weak self] in self?.onCancel?() }
                 }
             }
             return Unmanaged.passUnretained(event)

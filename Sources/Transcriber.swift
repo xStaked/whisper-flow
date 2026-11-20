@@ -5,6 +5,7 @@ enum TranscriberError: LocalizedError {
     case missingModel(String)
     case ffmpegFailed(String)
     case whisperFailed(Int32, String)
+    case timedOut(String)
     case emptyResult
 
     var errorDescription: String? {
@@ -17,6 +18,8 @@ enum TranscriberError: LocalizedError {
             return "ffmpeg falló: \(detail)"
         case .whisperFailed(let code, let detail):
             return "whisper-cli falló (código \(code)): \(detail)"
+        case .timedOut(let label):
+            return "\(label) se quedó colgado y lo cancelé."
         case .emptyResult:
             return "No se entendió nada en el audio."
         }
@@ -24,6 +27,9 @@ enum TranscriberError: LocalizedError {
 }
 
 /// Runs the local pipeline: WAV capture → ffmpeg (16 kHz mono) → whisper-cli → text.
+///
+/// Every child process has a hard timeout: a stuck whisper would otherwise leave
+/// the app permanently "busy" and the hotkey would stop responding forever.
 final class Transcriber {
     private let config: AppConfig
 
@@ -69,45 +75,65 @@ final class Transcriber {
         return text
     }
 
+    // MARK: - Child processes
+
     private func resample(input: URL, output: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: config.ffmpegPath)
-        process.arguments = ["-hide_banner", "-loglevel", "error", "-y",
-                             "-i", input.path,
-                             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
-                             output.path]
-        let stderr = Pipe()
-        process.standardError = stderr
-        process.standardOutput = Pipe()
-
-        try process.run()
-        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let detail = String(data: errorData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "error desconocido"
-            throw TranscriberError.ffmpegFailed(detail.isEmpty ? "error desconocido" : detail)
+        let (status, stderr) = try run(
+            path: config.ffmpegPath,
+            arguments: ["-hide_banner", "-loglevel", "error", "-y",
+                        "-i", input.path,
+                        "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                        output.path],
+            label: "ffmpeg",
+            timeout: 30
+        )
+        guard status == 0 else {
+            throw TranscriberError.ffmpegFailed(stderr.isEmpty ? "error desconocido" : stderr)
         }
     }
 
     private func runWhisper(args: [String]) throws {
+        let (status, stderr) = try run(
+            path: config.whisperBinaryPath,
+            arguments: args,
+            label: "whisper-cli",
+            timeout: 90
+        )
+        guard status == 0 else {
+            throw TranscriberError.whisperFailed(status, stderr.isEmpty ? "error desconocido" : stderr)
+        }
+    }
+
+    private func run(path: String, arguments: [String], label: String, timeout: TimeInterval) throws -> (Int32, String) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: config.whisperBinaryPath)
-        process.arguments = args
-        let stderr = Pipe()
-        process.standardError = stderr
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
         process.standardOutput = Pipe()
 
         try process.run()
-        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
 
-        guard process.terminationStatus == 0 else {
-            let detail = String(data: errorData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "error desconocido"
-            throw TranscriberError.whisperFailed(process.terminationStatus, detail)
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            usleep(50_000)
         }
+
+        if process.isRunning {
+            Diagnostics.log("\(label): sin respuesta tras \(Int(timeout))s, terminando")
+            process.terminate()
+            usleep(500_000)
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+            throw TranscriberError.timedOut(label)
+        }
+
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrText = String(data: stderrData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return (process.terminationStatus, stderrText)
     }
 
     /// Whisper hallucinates bracketed noise markers on silence; strip them out.

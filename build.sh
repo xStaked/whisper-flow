@@ -63,8 +63,18 @@ with open(out, "w") as handle:
 print("    runtime-defaults.json:", data["modelPath"] or "(modelo no encontrado)")
 PY
 
-echo "==> firmando (ad-hoc)"
-codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (aviso) codesign falló; la app puede pedir permisos de nuevo"
+echo "==> firmando"
+# Sign with the user's Apple Development certificate when available: an ad-hoc
+# signature changes on every build and makes macOS drop the microphone and
+# accessibility permissions each time.
+SIGN_HASH="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')"
+if [[ -n "$SIGN_HASH" ]]; then
+    echo "    identidad: $SIGN_HASH"
+    codesign --force --deep --sign "$SIGN_HASH" "$APP" || echo "    (aviso) codesign falló, la app queda sin firmar"
+else
+    echo "    sin certificado Apple Development: firma ad-hoc (los permisos se reinician en cada build)"
+    codesign --force --deep --sign - "$APP" || echo "    (aviso) codesign falló"
+fi
 
 # Refresh Launch Services so Finder/Spotlight see the new bundle.
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" 2>/dev/null || true

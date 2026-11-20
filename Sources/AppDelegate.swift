@@ -17,17 +17,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: State = .idle
     private var isBusy = false
     private var accessibilityTimer: Timer?
+    private var hotkeyHealthTimer: Timer?
 
     private let monitor = FnKeyMonitor()
     private let recorder = AudioRecorder()
     private let inserter = TextInserter()
     private let panel = TranscriptPanelController()
+    private let setup = SetupWindowController()
 
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Diagnostics.reset()
+
         config = Locator.loadOrDefault()
         Locator.save(config)
+
+        Diagnostics.log("--- WhisperFlow arrancó ---")
+        Diagnostics.log("accesibilidad concedida: \(AXIsProcessTrusted())")
+        Diagnostics.log("micrófono: \(AudioRecorder.permissionStatusDescription)")
+        Diagnostics.log("modelo: \(config.modelPath)")
+        Diagnostics.log("whisper-cli: \(config.whisperBinaryPath)")
+        Diagnostics.log("ffmpeg: \(config.ffmpegPath)")
+        Diagnostics.log("idioma: \(config.language)")
 
         store = TranscriptStore()
         transcriber = Transcriber(config: config)
@@ -45,7 +57,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestAccessibility()
         }
 
-        showOnboardingIfNeeded()
+        if !(AXIsProcessTrusted() && AudioRecorder.permissionGranted) {
+            setup.present { [weak self] in
+                self?.startMonitor()
+                self?.setState(.idle)
+            }
+        }
+
+        // Self-healing: macOS can disable a tap (sleep, device changes, timeouts).
+        // Reinstalling it quietly beats a hotkey that dies hours later.
+        hotkeyHealthTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            guard let self, AXIsProcessTrusted() else { return }
+            if !self.monitor.isRunning {
+                Diagnostics.log("salud: tap ausente, reinstalando")
+                self.monitor.start()
+                self.setState(.idle)
+            } else if !self.monitor.isEnabled {
+                Diagnostics.log("salud: tap deshabilitado, reactivando")
+                self.monitor.reenable()
+            }
+        }
 
         if ProcessInfo.processInfo.environment["WHISPERFLOW_SHOW_PANEL"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -75,16 +106,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func statusItemClicked(_ sender: Any?) {
         if NSApp.currentEvent?.type == .rightMouseUp {
             showContextMenu()
-        } else {
-            panel.toggle(store: store)
+            return
         }
+
+        // Without Accessibility there is no hotkey and no typing — make that loud.
+        guard AXIsProcessTrusted() else {
+            Diagnostics.log("clic: falta accesibilidad, abriendo ajustes")
+            _ = TextInserter.accessibilityTrusted(prompt: true)
+            openAccessibilitySettings()
+            scheduleAccessibilityRetry()
+            return
+        }
+
+        panel.toggle(store: store)
     }
 
     private func showContextMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: "Últimos dictados", action: #selector(openPanel), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Abrir permisos de accesibilidad", action: #selector(openAccessibilitySettings), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Abrir permisos", action: #selector(openSetup), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Abrir carpeta de configuración", action: #selector(openConfigFolder), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Ver log de diagnóstico", action: #selector(openLog), keyEquivalent: "").target = self
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Salir de WhisperFlow", action: #selector(quit), keyEquivalent: "q").target = self
 
@@ -99,6 +141,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openConfigFolder() {
         NSWorkspace.shared.open(Locator.supportDir)
+    }
+
+    @objc private func openLog() {
+        NSWorkspace.shared.open(Diagnostics.logURL)
+    }
+
+    @objc private func openSetup() {
+        setup.present { [weak self] in
+            self?.startMonitor()
+            self?.setState(.idle)
+        }
     }
 
     @objc private func quit() {
@@ -150,9 +203,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Recording flow
 
     private func beginRecording() {
-        guard !isBusy, state != .recording else { return }
+        Diagnostics.log("onPress: busy=\(isBusy) recording=\(recorder.isRecording) mic=\(AudioRecorder.permissionStatusDescription)")
+
+        guard !isBusy, !recorder.isRecording else {
+            Diagnostics.log("onPress: ignorado porque estaba ocupado")
+            return
+        }
 
         guard AudioRecorder.permissionGranted else {
+            Diagnostics.log("onPress: sin permiso de micrófono")
             AudioRecorder.requestPermission { [weak self] granted in
                 guard let self else { return }
                 if granted {
@@ -169,9 +228,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try recorder.start(maxSeconds: config.maxRecordSeconds)
+            Diagnostics.log("grabación: empezó")
             playSound("Tink")
             setState(.recording)
         } catch {
+            Diagnostics.log("grabación: error \(error.localizedDescription)")
             NSSound.beep()
             setState(.idle)
             presentError(error)
@@ -179,19 +240,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finishRecording() {
-        guard recorder.isRecording else { return }
+        guard recorder.isRecording else {
+            Diagnostics.log("onRelease: no había grabación activa")
+            return
+        }
 
-        guard let audioURL = recorder.stop() else {
+        guard let capture = recorder.stop() else {
+            Diagnostics.log("onRelease: el audio quedó vacío")
             setState(.idle)
             return
         }
 
         playSound("Pop")
+        Diagnostics.log("grabación: terminó (\(String(format: "%.1f", capture.durationSeconds))s), transcribiendo")
         setState(.transcribing)
         isBusy = true
+        startWatchdog()
 
         let transcriber = self.transcriber!
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let audioURL = AudioRecorder.writeWav(capture) else {
+                DispatchQueue.main.async {
+                    self?.isBusy = false
+                    self?.setState(.idle)
+                    self?.presentError(RecorderError.couldNotWriteFile)
+                }
+                return
+            }
             do {
                 let text = try transcriber.transcribe(recordingAt: audioURL)
                 DispatchQueue.main.async {
@@ -200,11 +275,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 DispatchQueue.main.async {
                     guard let self else { return }
+                    Diagnostics.log("transcripción: error \(error.localizedDescription)")
                     self.isBusy = false
                     self.setState(.idle)
                     self.presentError(error)
                 }
             }
+        }
+    }
+
+    /// If the pipeline ever wedges, free the state instead of staying busy forever —
+    /// a stuck `isBusy` is what silently kills the hotkey.
+    private func startWatchdog() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 120) { [weak self] in
+            guard let self, self.isBusy else { return }
+            Diagnostics.log("watchdog: 120s ocupado, liberando estado")
+            self.isBusy = false
+            self.setState(.idle)
         }
     }
 
@@ -215,11 +302,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliver(_ text: String) {
+        Diagnostics.log("texto: \(text)")
         store.add(text)
 
         var inserted = false
         if config.autoInsert {
             inserted = inserter.insert(text)
+            Diagnostics.log("inserción: \(inserted ? "verificada" : "NO verificada")")
+        } else {
+            Diagnostics.log("inserción: desactivada (autoInsert=false)")
         }
 
         isBusy = false
@@ -238,7 +329,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
         switch newState {
         case .idle:
-            button.image = Self.symbol("mic", tint: nil)
+            if AXIsProcessTrusted() {
+                button.image = Self.symbol("mic", tint: nil)
+                button.toolTip = "WhisperFlow — mantén fn y habla"
+            } else {
+                button.image = Self.symbol("mic.slash", tint: nil)
+                button.toolTip = "WhisperFlow — falta el permiso de Accesibilidad (haz clic)"
+            }
         case .recording:
             button.image = Self.symbol("mic.fill", tint: .systemRed)
         case .transcribing:
@@ -281,26 +378,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
             NSWorkspace.shared.open(url)
         }
-    }
-
-    private func showOnboardingIfNeeded() {
-        let key = "WhisperFlowOnboarded"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.set(true, forKey: key)
-
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "WhisperFlow está listo"
-        alert.informativeText = """
-        Mantén presionada la tecla fn (🌐), habla, y suelta.
-
-        El texto aparece en la app donde tengas el cursor. Si algo falla, el texto \
-        queda en el panel (clic en el icono del micrófono) para que lo copies.
-
-        Si al mantener fn se abre el emoji picker, ve a Ajustes del Sistema → \
-        Teclado → "Presionar 🌐 para" → "No hacer nada".
-        """
-        alert.addButton(withTitle: "Entendido")
-        alert.runModal()
     }
 }
