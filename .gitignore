@@ -1,0 +1,6 @@
+# Modelos y binarios grandes (se regeneran con download-model.sh / build.sh)
+models/
+vendor-whisper/
+vendor/
+build/
+*.aiff
