@@ -44,6 +44,8 @@ final class AudioRecorder {
 
     private(set) var isRecording = false
     var onAutoStop: (() -> Void)?
+    /// Called ~12 times per second with the current input level (0...1).
+    var onLevel: ((Float) -> Void)?
 
     static var permissionGranted: Bool {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -182,6 +184,14 @@ final class AudioRecorder {
         lock.lock()
         samples.append(contentsOf: mono)
         lock.unlock()
+
+        if let onLevel {
+            var sum: Float = 0
+            for value in mono { sum += value * value }
+            let rms = (sum / Float(mono.count)).squareRoot()
+            let level = min(1, rms * 7) // speech sits around 0.02-0.15 RMS
+            DispatchQueue.main.async { onLevel(level) }
+        }
     }
 
     /// Encodes to 16-bit PCM WAV. Called off the main thread — never from the
