@@ -83,7 +83,9 @@ Mientras dictás aparece una píldora abajo al centro (100 px sobre el Dock):
 ╰──────────────────────────╯
 ```
 
-- **El waveform es tu voz real** (RMS del micrófono), no una animación decorativa.
+- **El waveform es tu voz real**, no una animación decorativa: mide RMS en dBFS
+  con ganancia adaptativa, así que responde igual con AirPods, con el micro interno
+  o con un USB, y no hace falta gritar para que se mueva.
 - **Cronómetro**, útil en dictados largos y para saber cuánto falta al corte de 120 s.
 - Al soltar cambia a `transcribiendo…`, después `✓ insertado` (o `revisá el panel`)
   y desaparece solo.
@@ -147,7 +149,9 @@ la razón de que en reposo sean 21 MB en vez de 900 MB.
 
 - Campos con **secure input** (contraseñas, algunos bancos) — macOS lo bloquea.
 - Apps Electron/web que ignoran eventos Unicode → el fallback ⌘V lo cubre.
-- Si tampoco así entra, el panel se abre solo con el texto listo para copiar.
+- Si tampoco así entra, se abre **una ventana con el texto en una caja editable y
+  seleccionada**: ⌘C y listo, igual que en Notes. No depende de que la app destino
+  acepte el pegado.
 
 ## Desarrollo
 

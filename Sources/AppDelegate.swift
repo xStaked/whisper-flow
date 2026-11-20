@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let panel = TranscriptPanelController()
     private let setup = SetupWindowController()
     private let hud = OverlayHUD()
+    private let fallback = FallbackWindowController()
 
     // MARK: - Lifecycle
 
@@ -79,6 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if !self.monitor.isEnabled {
                 Diagnostics.log("salud: tap deshabilitado, reactivando")
                 self.monitor.reenable()
+            }
+        }
+
+        if ProcessInfo.processInfo.environment["WHISPERFLOW_TEST_FALLBACK"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.fallback.present("Este es un texto de prueba del fallback. Seleccionalo y copialo con ⌘C.")
             }
         }
 
@@ -400,13 +407,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if inserted {
                 hud.showSuccess()
             } else {
-                hud.showWarning("revisá el panel")
+                hud.showWarning("revisá la ventana")
             }
         }
 
         if !inserted {
-            // Could not verify the text landed in the app — show it so it can be copied.
-            panel.show(store: store)
+            // Could not verify the text landed — give an editable box so ⌘C works.
+            fallback.present(text)
         }
     }
 

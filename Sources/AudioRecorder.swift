@@ -46,6 +46,8 @@ final class AudioRecorder {
     var onAutoStop: (() -> Void)?
     /// Called ~12 times per second with the current input level (0...1).
     var onLevel: ((Float) -> Void)?
+    /// Rolling reference so the meter adapts to the microphone's actual loudness.
+    private var adaptivePeak: Float = 0.60
 
     static var permissionGranted: Bool {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -189,8 +191,21 @@ final class AudioRecorder {
             var sum: Float = 0
             for value in mono { sum += value * value }
             let rms = (sum / Float(mono.count)).squareRoot()
-            let level = min(1, rms * 7) // speech sits around 0.02-0.15 RMS
-            DispatchQueue.main.async { onLevel(level) }
+
+            // RMS is a poor meter on its own: normal speech sits near 0.02-0.05,
+            // which a linear scale renders as a dead bar. Work in dBFS instead:
+            // -55 dB = silence, -10 dB = loud speech.
+            let decibels = 20 * log10(max(rms, 1e-7))
+            var level = (decibels + 52) / 40
+            level = min(1, max(0, level))
+
+            // Adaptive gain: a quiet mic (AirPods, built-in, noisy room) still
+            // fills the meter, and the reference decays slowly when you go silent.
+            adaptivePeak = max(level, adaptivePeak * 0.995)
+            let scale = 1 / max(0.60, adaptivePeak)
+            let shown = pow(min(1, level * scale), 0.9)
+
+            DispatchQueue.main.async { onLevel(shown) }
         }
     }
 
