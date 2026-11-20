@@ -15,6 +15,11 @@ import ApplicationServices
 /// treated as failure.
 final class TextInserter {
 
+    /// Every clipboard write bumps this. A pending "restore the old clipboard"
+    /// only fires if nobody wrote to the clipboard in the meantime — otherwise it
+    /// would silently roll back the text we had just copied for the user.
+    private var clipboardGeneration = 0
+
     private struct CaretState: Equatable {
         let caret: Int?
         let valueLength: Int?
@@ -44,38 +49,46 @@ final class TextInserter {
 
         let destination = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "desconocida"
         let before = caretState()
+        Diagnostics.log("inserción: foco=[\(focusDescription())] appActiva=\(NSApp.isActive)")
         Diagnostics.log("inserción: destino=\(destination) caret=\(before?.caret.map(String.init) ?? "-") valor=\(before?.valueLength.map(String.init) ?? "-")")
 
-        // 1. Atomic paste: one event, so the text can never arrive half-written.
-        pasteViaClipboard(trimmed)
+        // 1. Type the characters. This needs no clipboard, so it can never paste
+        //    whatever the user had copied before — and it works in Electron.
+        typeUnicode(trimmed)
 
         // Verification is only trustworthy when the app exposes its text through
-        // Accessibility. Web views and Electron usually do not — guessing would
-        // mean typing a second copy on top of a successful paste.
+        // Accessibility. Web views usually do not; guessing there would duplicate text.
         guard let before, before.valueLength != nil else {
-            Diagnostics.log("inserción: sin lectura del texto en destino, se asume éxito tras ⌘V")
+            Diagnostics.log("inserción: sin lectura del texto en destino, se asume éxito al tipear")
             return true
         }
         if waitForValueChange(from: before) {
-            Diagnostics.log("inserción: verificada con ⌘V")
+            Diagnostics.log("inserción: verificada tipeando")
             return true
         }
 
-        // 2. ⌘V genuinely did nothing (blocked/disabled): type the characters.
-        Diagnostics.log("inserción: ⌘V no cambió el texto, probando eventos Unicode")
-        let beforeTyping = caretState()
-        typeUnicode(trimmed)
-        if let beforeTyping, beforeTyping.valueLength != nil, waitForValueChange(from: beforeTyping) {
-            Diagnostics.log("inserción: verificada con eventos Unicode")
+        // 2. Typing was ignored (some sandboxed apps): fall back to ⌘V.
+        Diagnostics.log("inserción: tipear no cambió el texto, probando ⌘V")
+        let beforePaste = caretState()
+        pasteViaClipboard(trimmed)
+        if let beforePaste, beforePaste.valueLength != nil, waitForValueChange(from: beforePaste) {
+            Diagnostics.log("inserción: verificada con ⌘V")
             return true
         }
         return false
     }
 
     func copyToClipboard(_ text: String) {
+        _ = writeClipboard(text)
+    }
+
+    @discardableResult
+    private func writeClipboard(_ text: String) -> Int {
+        clipboardGeneration += 1
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        return clipboardGeneration
     }
 
     // MARK: Strategy 1 — clipboard paste
@@ -83,22 +96,19 @@ final class TextInserter {
     private func pasteViaClipboard(_ text: String) {
         let pasteboard = NSPasteboard.general
         let saved = pasteboard.string(forType: .string)
-
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let generation = writeClipboard(text)
 
         // Give the pasteboard a beat to publish before the target asks for it.
         usleep(30_000)
 
         postCommandV()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            // Only restore if our text is still there; never clobber a fresh copy.
-            guard pasteboard.string(forType: .string) == text else { return }
-            if let saved {
-                pasteboard.clearContents()
-                pasteboard.setString(saved, forType: .string)
-            }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self, self.clipboardGeneration == generation else { return }
+            guard pasteboard.string(forType: .string) == text, let saved else { return }
+            self.clipboardGeneration += 1
+            pasteboard.clearContents()
+            pasteboard.setString(saved, forType: .string)
         }
     }
 
@@ -147,6 +157,28 @@ final class TextInserter {
             index = end
             usleep(8_000)
         }
+    }
+
+    /// What actually has the keyboard focus, for diagnosing "nothing happens".
+    private func focusDescription() -> String {
+        guard AXIsProcessTrusted() else { return "sin permisos" }
+        let system = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focusedRef,
+              CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else {
+            return "sin foco"
+        }
+        let element = focusedRef as! AXUIElement
+
+        var roleRef: CFTypeRef?
+        var descRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+        AXUIElementCopyAttributeValue(element, kAXDescriptionAttribute as CFString, &descRef)
+
+        let role = (roleRef as? String) ?? "?"
+        let description = (descRef as? String) ?? ""
+        return description.isEmpty ? role : "\(role) · \(description)"
     }
 
     // MARK: Verification via Accessibility
