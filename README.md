@@ -149,9 +149,10 @@ la razón de que en reposo sean 21 MB en vez de 900 MB.
 
 - Campos con **secure input** (contraseñas, algunos bancos) — macOS lo bloquea.
 - Apps Electron/web que ignoran eventos Unicode → el fallback ⌘V lo cubre.
-- Si tampoco así entra, se abre **una ventana con el texto en una caja editable y
-  seleccionada**: ⌘C y listo, igual que en Notes. No depende de que la app destino
-  acepte el pegado.
+- Si tampoco así entra, el texto queda **copiado al portapapeles** y la píldora
+  avisa `copiado al portapapeles` con un icono teal. No abre ninguna ventana: una
+  ventana emergente activaría WhisperFlow y el siguiente dictado caería dentro de
+  ella en vez de en tu app.
 
 ## Desarrollo
 

@@ -94,6 +94,23 @@ final class OverlayHUD {
         scheduleHide(after: 2.2)
     }
 
+    func showCopied() {
+        ensurePanel()
+        guard let panel else { return }
+
+        stopTicker()
+        waveform?.isHidden = true
+        timeLabel?.isHidden = true
+        statusLabel?.isHidden = false
+        statusLabel?.stringValue = "copiado al portapapeles"
+        statusLabel?.textColor = .systemTeal
+        iconView?.image = symbol("doc.on.clipboard.fill", tint: .systemTeal)
+
+        position()
+        fadeIn(panel)
+        scheduleHide(after: 1.8)
+    }
+
     func showError(_ message: String) {
         ensurePanel()
         guard let panel else { return }
