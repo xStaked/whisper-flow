@@ -13,6 +13,8 @@ final class OverlayHUD {
     private var timeLabel: NSTextField?
     private var statusLabel: NSTextField?
 
+    /// True while the pill is in the "recording" state, used as a safety check.
+    private(set) var isShowingRecording = false
     private var ticker: Timer?
     private var startedAt: Date?
     private var hideWork: DispatchWorkItem?
@@ -27,6 +29,7 @@ final class OverlayHUD {
         ensurePanel()
         guard let panel else { return }
 
+        isShowingRecording = true
         startedAt = Date()
         waveform?.isHidden = false
         waveform?.reset()
@@ -48,6 +51,8 @@ final class OverlayHUD {
         ensurePanel()
         guard let panel else { return }
 
+        isShowingRecording = false
+        isShowingRecording = false
         stopTicker()
         waveform?.isHidden = true
         timeLabel?.isHidden = true
@@ -64,6 +69,7 @@ final class OverlayHUD {
         ensurePanel()
         guard let panel else { return }
 
+        isShowingRecording = false
         stopTicker()
         waveform?.isHidden = true
         timeLabel?.isHidden = true
@@ -81,6 +87,7 @@ final class OverlayHUD {
         ensurePanel()
         guard let panel else { return }
 
+        isShowingRecording = false
         stopTicker()
         waveform?.isHidden = true
         timeLabel?.isHidden = true
@@ -98,6 +105,7 @@ final class OverlayHUD {
         ensurePanel()
         guard let panel else { return }
 
+        isShowingRecording = false
         stopTicker()
         waveform?.isHidden = true
         timeLabel?.isHidden = true
@@ -115,6 +123,7 @@ final class OverlayHUD {
         ensurePanel()
         guard let panel else { return }
 
+        isShowingRecording = false
         stopTicker()
         waveform?.isHidden = true
         timeLabel?.isHidden = true
@@ -129,6 +138,7 @@ final class OverlayHUD {
     }
 
     func hide() {
+        isShowingRecording = false
         stopTicker()
         hideWork?.cancel()
         hideWork = nil

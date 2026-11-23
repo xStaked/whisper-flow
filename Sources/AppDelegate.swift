@@ -17,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: State = .idle
     private var isBusy = false
     private var accessibilityTimer: Timer?
+    /// `AVAudioEngine.start()` can block for seconds while audio devices change
+    /// (plugging headphones). The fn release may arrive before it returns.
+    private enum PendingAction { case none, stop, cancel }
+    private var pendingAction: PendingAction = .none
+    private var startInFlight = false
     private var hotkeyHealthTimer: Timer?
 
     private let monitor = FnKeyMonitor()
@@ -89,6 +94,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if !self.monitor.isEnabled {
                 Diagnostics.log("salud: tap deshabilitado, reactivando")
                 self.monitor.reenable()
+            }
+
+            // La píldora no puede quedarse animando si no hay grabación real.
+            if self.hud.isShowingRecording, !self.recorder.isRecording, !self.startInFlight {
+                Diagnostics.log("salud: píldora grabando sin grabación, se oculta")
+                self.hud.hide()
+                self.setState(.idle)
             }
         }
 
@@ -300,22 +312,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        startInFlight = true
+        pendingAction = .none
+        let maxSeconds = config.maxRecordSeconds
+
         do {
-            try recorder.start(maxSeconds: config.maxRecordSeconds)
+            try recorder.start(maxSeconds: maxSeconds)
+        } catch {
+            // A device that just appeared/disappeared is usually ready a moment
+            // later; one short retry avoids losing the dictation.
+            Diagnostics.log("grabación: primer intento falló (\(error.localizedDescription)), reintentando")
+            usleep(250_000)
+            do {
+                try recorder.start(maxSeconds: maxSeconds)
+            } catch {
+                startInFlight = false
+                pendingAction = .none
+                Diagnostics.log("grabación: error \(error.localizedDescription)")
+                NSSound.beep()
+                setState(.idle)
+                hud.hide()
+                if config.showOverlay { hud.showError("no se pudo grabar") }
+                presentError(error)
+                return
+            }
+        }
+
+        startInFlight = false
+
+        switch pendingAction {
+        case .cancel:
+            pendingAction = .none
+            Diagnostics.log("grabación: fn se soltó durante el arranque, se descarta")
+            recorder.cancel()
+            setState(.idle)
+            hud.hide()
+        case .stop:
+            pendingAction = .none
+            Diagnostics.log("grabación: fn se soltó durante el arranque, se cierra ya")
+            finishRecording()
+        case .none:
             Diagnostics.log("grabación: empezó")
             if config.showOverlay { hud.showRecording() }
             playSound("Tink")
             setState(.recording)
-        } catch {
-            Diagnostics.log("grabación: error \(error.localizedDescription)")
-            NSSound.beep()
-            setState(.idle)
-            if config.showOverlay { hud.showError("no se pudo grabar") }
-            presentError(error)
         }
     }
 
     private func finishRecording() {
+        if startInFlight {
+            pendingAction = .stop
+            Diagnostics.log("onRelease: el arranque seguía en curso, se cerrará al terminar")
+            return
+        }
+
         guard recorder.isRecording else {
             Diagnostics.log("onRelease: no había grabación activa")
             return
@@ -374,6 +424,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func cancelRecording() {
+        if startInFlight {
+            pendingAction = .cancel
+            Diagnostics.log("onCancel: el arranque seguía en curso, se descartará")
+            return
+        }
+
         guard recorder.isRecording else { return }
         recorder.cancel()
         setState(.idle)

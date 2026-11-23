@@ -87,6 +87,7 @@ final class AudioRecorder {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw RecorderError.noInputDevice }
 
+        Diagnostics.log("audio: \(Int(format.sampleRate)) Hz · \(format.channelCount) canal(es)")
         sampleRate = format.sampleRate
         lock.lock()
         samples.removeAll(keepingCapacity: true)
