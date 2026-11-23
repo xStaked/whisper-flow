@@ -29,9 +29,37 @@ mantén fn ──► graba ──► whisper.cpp local ──► [limpieza opcio
 
 ## Requisitos
 
-- macOS 13+ (probado en macOS 26 / Apple Silicon)
-- `ffmpeg` en el PATH (o edita `ffmpegPath` en el config)
-- `whisper-cli` compilado en `vendor-whisper/` (o el que trae el bundle)
+Nada de esto se instala solo, y **no hay Ollama, ni daemon, ni nube**: todo corre
+sobre binarios nativos.
+
+| Qué | Para qué | Cómo se obtiene | Peso |
+|---|---|---|---|
+| macOS 13+ (Apple Silicon recomendado) | Sistema | — | — |
+| Command Line Tools de Xcode | `swiftc`, para compilar la app | `xcode-select --install` | ~1 GB |
+| `ffmpeg` | Convertir el audio a 16 kHz mono | `brew install ffmpeg` | ~80 MB |
+| cmake portable | Compilar whisper.cpp | `scripts/bootstrap.sh` | ~75 MB |
+| whisper.cpp (`whisper-cli`) | Transcribir | `scripts/bootstrap.sh` | ~83 MB |
+| `ggml-large-v3-turbo-q5_0.bin` | Modelo de voz | `scripts/bootstrap.sh` | 547 MB |
+| llama.cpp (`llama-completion`) | Limpieza con IA — opcional | `scripts/bootstrap.sh` | ~40 MB |
+| `Qwen2.5-3B-Instruct-Q4_K_M.gguf` | Limpieza con IA — opcional | `scripts/bootstrap.sh` | 1.8 GB |
+
+Total con limpieza IA: **~2.6 GB**. Sin la parte de IA: **~800 MB**.
+
+> **Sobre Ollama:** no se usa en ninguna parte. El runtime de la limpieza es
+> `llama.cpp` (binario oficial con Metal) y el modelo es un `.gguf` suelto que se
+> pasa por argumento. Ollama agregaría un daemon propio, un puerto y un cliente
+> HTTP para hacer lo mismo.
+
+### Arranque rápido
+
+```bash
+git clone https://github.com/xStaked/whisper-flow.git
+cd whisper-flow
+./scripts/bootstrap.sh          # compila whisper.cpp, baja modelos, empaqueta la app
+open build/WhisperFlow.app
+```
+
+El script es idempotente: si algo ya está descargado o compilado, lo saltea.
 
 ## Compilar
 
