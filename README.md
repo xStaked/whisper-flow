@@ -53,6 +53,20 @@ curl -L -o models/Qwen2.5-3B-Instruct-Q4_K_M.gguf \
   https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf   # limpieza IA, ~1.8 GB
 ```
 
+## Arranque automático
+
+```bash
+./scripts/install-login-item.sh          # arranca al iniciar sesión
+./scripts/install-login-item.sh --remove # quitar
+```
+
+Crea `~/Library/LaunchAgents/com.local.whisperflow.plist`, que lanza la app con
+`open -g` — **no** con el binario directo: ejecutar `Contents/MacOS/WhisperFlow`
+a mano deja el proceso vivo pero sin inicializar `NSApplication`, así que el
+hotkey nunca se instala.
+
+macOS lo lista en Ajustes → General → Ítems de inicio y extensiones.
+
 ## Permisos (una sola vez)
 
 1. **Micrófono** → permitir.
