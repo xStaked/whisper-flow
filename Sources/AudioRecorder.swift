@@ -41,6 +41,8 @@ final class AudioRecorder {
     private var sampleRate: Double = 48_000
     private var autoStopWork: DispatchWorkItem?
     private var configObserver: NSObjectProtocol?
+    private var startedAt = Date()
+    private var lastBufferAt: Date?
 
     private(set) var isRecording = false
     var onAutoStop: (() -> Void)?
@@ -88,6 +90,7 @@ final class AudioRecorder {
         guard format.sampleRate > 0, format.channelCount > 0 else { throw RecorderError.noInputDevice }
 
         Diagnostics.log("audio: \(Int(format.sampleRate)) Hz · \(format.channelCount) canal(es)")
+        startedAt = Date()
         sampleRate = format.sampleRate
         lock.lock()
         samples.removeAll(keepingCapacity: true)
@@ -116,8 +119,31 @@ final class AudioRecorder {
             queue: .main
         ) { [weak self] _ in
             guard let self, self.isRecording else { return }
-            Diagnostics.log("audio: cambió el dispositivo, cerrando grabación")
+
+            // Bluetooth headsets switch into "headset" profile when the engine
+            // starts, which fires a configuration change immediately. Closing the
+            // recording there meant Bluetooth mics could never record anything.
+            let age = Date().timeIntervalSince(self.startedAt)
+            if age < 2.0 {
+                Diagnostics.log("audio: reconfiguración de arranque ignorada (\(String(format: "%.2f", age))s)")
+                if !engine.isRunning {
+                    do { try engine.start() } catch {
+                        Diagnostics.log("audio: no se pudo reanudar — \(error.localizedDescription)")
+                    }
+                }
+                return
+            }
+
+            Diagnostics.log("audio: cambió el dispositivo a mitad de grabación, cerrando")
             self.onAutoStop?()
+        }
+
+        // If the profile switch invalidated the tap we would record pure silence.
+        // Check that buffers are actually flowing and reinstall the tap if not.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self, self.isRecording, self.lastBufferAt == nil else { return }
+            Diagnostics.log("audio: no llegaron muestras, reinstalando el tap")
+            self.reinstallTap()
         }
 
         let work = DispatchWorkItem { [weak self] in
@@ -149,6 +175,34 @@ final class AudioRecorder {
         lock.unlock()
     }
 
+    /// Rebuilds the input tap against the device's current format, keeping the
+    /// audio captured so far.
+    private func reinstallTap() {
+        guard let engine, isRecording else { return }
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            Diagnostics.log("audio: el dispositivo no reporta formato válido")
+            return
+        }
+
+        input.removeTap(onBus: 0)
+        lock.lock()
+        let alreadyCaptured = !samples.isEmpty
+        lock.unlock()
+        if !alreadyCaptured { sampleRate = format.sampleRate }
+
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+            self?.append(buffer)
+        }
+        if !engine.isRunning {
+            do { try engine.start() } catch {
+                Diagnostics.log("audio: no se pudo reanudar — \(error.localizedDescription)")
+            }
+        }
+        Diagnostics.log("audio: tap reinstalado a \(Int(format.sampleRate)) Hz")
+    }
+
     private func finish() {
         autoStopWork?.cancel()
         autoStopWork = nil
@@ -166,6 +220,7 @@ final class AudioRecorder {
             self.engine = nil
         }
         isRecording = false
+        lastBufferAt = nil
     }
 
     private func append(_ buffer: AVAudioPCMBuffer) {
@@ -184,6 +239,7 @@ final class AudioRecorder {
             for i in 0..<frames { mono[i] *= scale }
         }
 
+        lastBufferAt = Date()
         lock.lock()
         samples.append(contentsOf: mono)
         lock.unlock()
