@@ -121,6 +121,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.panel.show(store: self.store)
             }
         }
+
+        // Development flags used to shoot the screenshots in docs/images.
+        if CommandLine.arguments.contains("--demo-hud") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                self.hud.showRecording()
+                // A plausible speech envelope, so the meter looks like real audio.
+                var tick = 0
+                Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+                    tick += 1
+                    if tick > 120 { timer.invalidate(); return }
+                    let base = Float(0.42 + 0.30 * sin(Double(tick) * 0.42))
+                    let jitter = Float.random(in: -0.10...0.10)
+                    self.hud.update(level: max(0.08, min(1, base + jitter)))
+                }
+            }
+        }
+
+        if CommandLine.arguments.contains("--demo-setup") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.setup.present { }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

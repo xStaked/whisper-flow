@@ -264,7 +264,13 @@ final class OverlayHUD {
     private func position() {
         guard let panel else { return }
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        let screen: NSScreen?
+        if let index = ProcessInfo.processInfo.environment["WHISPERFLOW_HUD_SCREEN"].flatMap(Int.init),
+           index < NSScreen.screens.count {
+            screen = NSScreen.screens[index]
+        } else {
+            screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        }
         guard let visible = screen?.visibleFrame else { return }
 
         let origin = NSPoint(

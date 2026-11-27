@@ -6,6 +6,8 @@ and the text appears in whatever app has the cursor.
 A minimalist clone of Wispr Flow with no subscription: your audio never leaves your
 Mac, there is no account, there is no cloud.
 
+![WhisperFlow main window](docs/images/main-window.png)
+
 ```
 hold fn ──► record ──► local whisper.cpp ──► [optional cleanup] ──► type the text
                                                               └──► panel (if it fails)
@@ -116,7 +118,9 @@ If holding `fn` opens the emoji picker:
 **Settings → Keyboard → "Press 🌐 to" → Do Nothing**.
 
 The app ships a permissions window that updates live and closes itself once both
-are granted.
+are granted:
+
+![Permission checker](docs/images/permissions.png)
 
 ## Usage
 
@@ -130,11 +134,7 @@ Icon: microphone = idle · red = recording · orange = transcribing.
 
 While dictating, a pill appears at the bottom centre (100 px above the Dock):
 
-```
-╭──────────────────────────╮
-│ 🎙  ▁▃▅▇▅▃▁▂▄▆▄▂   0:07  │   recording
-╰──────────────────────────╯
-```
+![Recording indicator](docs/images/hud.png)
 
 - **The waveform is your real voice**, not decoration: it measures RMS in dBFS with
   adaptive gain, so it responds the same with AirPods, the built-in mic or a USB
@@ -151,22 +151,11 @@ While dictating, a pill appears at the bottom centre (100 px above the Dock):
 
 Clicking the menu icon opens **the full app**, not a pill:
 
-```
-┌────────────┬──────────────────────────────────────────┐
-│ ⚡ WhisperFlow │  Good afternoon                       │
-│            │  [Search dictations]  3052  50  61  8    │
-│ Home       │  ─────────────────────────────────────   │
-│ Insights   │  TODAY                                   │
-│ Dictionary │  ┌────────────────────────────────────┐  │
-│ Settings   │  │ Your dictation, at reading size... │  │
-│            │  │ 11:56                              │  │
-│            │  └────────────────────────────────────┘  │
-└────────────┴──────────────────────────────────────────┘
-```
-
 - **Home**: dictations grouped by day (Today / Yesterday / date), with stats.
 - **Insights**: word totals, dictation count and average.
 - **Dictionary**: the words you use most across your dictations.
+
+![Dictionary](docs/images/dictionary.png)
 - **Search**: filters as you type, no waiting.
 - Every card: selectable text, copy with one click or ⌘C.
 
@@ -271,7 +260,17 @@ Useful flags for development:
 ```bash
 ./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --show-window          # open the main window
 ./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --show-window --section dictionary
+./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --demo-hud            # show the recording pill
+./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --demo-setup          # show the permission window
+WHISPERFLOW_HUD_SCREEN=0 ./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --demo-hud   # force a screen
 ```
+
+The screenshots in `docs/images/` were taken with those flags, so they can be
+regenerated after a UI change.
+
+> Screenshots show demo content. Your dictations live in
+> `~/Library/Application Support/WhisperFlow/history.json` and are never part of
+> the repo.
 
 ## Uninstall
 

@@ -28,6 +28,12 @@ final class MainWindowController: NSObject {
         if let section { currentSection = section }
 
         ensureWindow()
+
+        // A stale query from a previous session would hide every dictation.
+        if let searchField, !searchField.stringValue.isEmpty {
+            searchField.stringValue = ""
+            searchTerm = ""
+        }
         refresh()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -457,9 +463,11 @@ final class MainWindowController: NSObject {
 
     private func groupByDay(_ entries: [TranscriptEntry]) -> [(String, [TranscriptEntry])] {
         let calendar = Calendar.current
+        // Let the system pick the format for its own locale: a hardcoded pattern
+        // produced "27 de November" hybrids and wrong years on some regions.
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.dateFormat = "d 'de' MMMM, yyyy"
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("dMMMMyyyy")
 
         var order: [Date] = []
         var groups: [Date: [TranscriptEntry]] = [:]
