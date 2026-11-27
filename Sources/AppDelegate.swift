@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recorder = AudioRecorder()
     private let inserter = TextInserter()
     private let panel = TranscriptPanelController()
+    private let mainWindow = MainWindowController()
     private let setup = SetupWindowController()
     private let hud = OverlayHUD()
 
@@ -105,6 +106,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        if CommandLine.arguments.contains("--show-window") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                let section = CommandLine.arguments.firstIndex(of: "--section")
+                    .flatMap { $0 + 1 < CommandLine.arguments.count ? CommandLine.arguments[$0 + 1] : nil }
+                self.mainWindow.present(store: self.store, transcriber: self.transcriber, section: section)
+            }
+        }
+
         if ProcessInfo.processInfo.environment["WHISPERFLOW_SHOW_PANEL"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 guard let self else { return }
@@ -145,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        panel.toggle(store: store)
+        mainWindow.present(store: store, transcriber: transcriber)
     }
 
     private func showContextMenu() {
@@ -205,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openPanel() {
-        panel.show(store: store)
+        mainWindow.present(store: store, transcriber: transcriber)
     }
 
     @objc private func openConfigFolder() {
@@ -478,7 +488,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isBusy = false
         setState(.idle)
-        panel.refreshIfVisible()
+        mainWindow.refreshIfVisible()
 
         if config.showOverlay {
             if inserted {

@@ -70,12 +70,27 @@ echo "==> firmando"
 # signature changes on every build and makes macOS drop the microphone and
 # accessibility permissions each time.
 SIGN_HASH="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')"
-if [[ -n "$SIGN_HASH" ]]; then
-    echo "    identidad: $SIGN_HASH"
-    codesign --force --deep --sign "$SIGN_HASH" "$APP" || echo "    (aviso) codesign falló, la app queda sin firmar"
+
+sign_ad_hoc() {
+    codesign --force --deep --sign - "$APP" 2>/dev/null \
+        || echo "    (aviso) no se pudo firmar; la app igual corre"
+}
+
+if [[ -z "$SIGN_HASH" ]]; then
+    echo "    sin certificado Apple Development: firma ad-hoc"
+    echo "    (los permisos de macOS se reinician en cada build)"
+    sign_ad_hoc
 else
-    echo "    sin certificado Apple Development: firma ad-hoc (los permisos se reinician en cada build)"
-    codesign --force --deep --sign - "$APP" || echo "    (aviso) codesign falló"
+    echo "    identidad: $SIGN_HASH"
+    # codesign can block forever behind a keychain prompt. Never hang the build.
+    if perl -e 'alarm shift; exec @ARGV' 20 \
+        codesign --force --deep --sign "$SIGN_HASH" "$APP" 2>/dev/null; then
+        echo "    firmada"
+    else
+        echo "    (aviso) firma con certificado bloqueada; se usa ad-hoc"
+        echo "    desbloqueá el llavero y recompilá para conservar los permisos"
+        sign_ad_hoc
+    fi
 fi
 
 # Refresh Launch Services so Finder/Spotlight see the new bundle.

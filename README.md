@@ -135,6 +135,29 @@ Mientras dictás aparece una píldora abajo al centro (100 px sobre el Dock):
   así el texto siempre cae en la app correcta. Funciona en fullscreen y en todos los Spaces.
 - Se apaga en **clic derecho → Indicador en pantalla** (o `showOverlay: false`).
 
+## La ventana principal
+
+Clic en el icono del menú abre **la app completa**, no una píldora:
+
+```
+┌────────────┬──────────────────────────────────────────┐
+│ ⚡ WhisperFlow │  Buenas tardes                        │
+│            │  [Buscar dictados]  3052  50  61  8      │
+│ Home       │  ─────────────────────────────────────   │
+│ Insights   │  HOY                                     │
+│ Diccionario│  ┌────────────────────────────────────┐  │
+│ Ajustes    │  │ Tu dictado, a tamaño de lectura... │  │
+│            │  │ 11:56                              │  │
+│            │  └────────────────────────────────────┘  │
+└────────────┴──────────────────────────────────────────┘
+```
+
+- **Home**: dictados agrupados por día (Hoy / Ayer / fecha), con estadísticas.
+- **Insights**: totales de palabras, dictados y promedio.
+- **Diccionario**: las palabras que más usás en tus dictados.
+- **Buscar**: filtra al escribir, sin esperar.
+- Cada tarjeta: texto seleccionable, copiar con un clic o ⌘C.
+
 ## Dónde quedan tus textos
 
 Todo vive en una sola carpeta, fuera del repo:
