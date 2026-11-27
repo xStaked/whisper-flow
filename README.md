@@ -70,8 +70,17 @@ open build/WhisperFlow.app
 
 `build.sh` compila el bundle Swift, copia `whisper-cli` dentro de la app y la firma
 con tu certificado **Apple Development** si existe (así los permisos de macOS
-sobreviven a cada recompilación). Si no hay certificado, firma ad-hoc y macOS
-pedirá los permisos otra vez tras cada build.
+sobreviven a cada recompilación).
+
+Detalles que descubrimos usando esto a diario:
+
+- La firma espera un **timeout de 20 s**. Si el llavero está bloqueado, `codesign`
+  se queda esperando un diálogo invisible y el build no terminaba nunca.
+- Si la firma con certificado no sale, cae a **ad-hoc** para que la app igual
+  funcione. Ojo: eso **borra los permisos de Accesibilidad** y hay que
+  concederlos otra vez. Desbloqueá el llavero antes de recompilar si querés
+  conservarlos.
+- No recompiles con la app corriendo: `codesign` se cuelga sobre un bundle en uso.
 
 Modelos:
 
