@@ -31,16 +31,16 @@ enum PostProcessor {
             return "disponible"
         case .unavailable(let reason):
             switch reason {
-            case .deviceNotEligible: return "dispositivo no compatible"
-            case .appleIntelligenceNotEnabled: return "Apple Intelligence desactivada"
-            case .modelNotReady: return "modelo aún descargándose"
-            @unknown default: return "no disponible"
+            case .deviceNotEligible: return "device not eligible"
+            case .appleIntelligenceNotEnabled: return "Apple Intelligence disabled"
+            case .modelNotReady: return "model still downloading"
+            @unknown default: return "unavailable"
             }
         @unknown default:
-            return "no disponible"
+            return "unavailable"
         }
         #else
-        return "framework ausente"
+        return "framework missing"
         #endif
     }
 
@@ -53,17 +53,17 @@ enum PostProcessor {
 
         let engine = LlamaEngine(binaryPath: config.llmBinaryPath, modelPath: config.llmModelPath)
         guard engine.isReady else {
-            Diagnostics.log("llm: sin backend (Apple: \(statusDescription); llama: no instalado)")
+            Diagnostics.log("llm: no backend (Apple: \(statusDescription); llama: not installed)")
             return nil
         }
 
         let started = Date()
         do {
             let cleaned = try engine.clean(raw)
-            Diagnostics.log("llm: llama.cpp respondió en \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
+            Diagnostics.log("llm: llama.cpp answered in \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
             return sanitize(cleaned, original: raw)
         } catch {
-            Diagnostics.log("llm: llama falló — \(error.localizedDescription)")
+            Diagnostics.log("llm: llama failed — \(error.localizedDescription)")
             return nil
         }
     }
@@ -90,12 +90,12 @@ enum PostProcessor {
         }
 
         if semaphore.wait(timeout: .now() + timeout) == .timedOut {
-            Diagnostics.log("llm: timeout tras \(Int(timeout))s")
+            Diagnostics.log("llm: timeout after \(Int(timeout))s")
             return nil
         }
 
         let elapsed = Date().timeIntervalSince(started)
-        Diagnostics.log("llm: respondió en \(String(format: "%.1f", elapsed))s")
+        Diagnostics.log("llm: answered in \(String(format: "%.1f", elapsed))s")
         return output
     }
 
@@ -104,7 +104,7 @@ enum PostProcessor {
         #if canImport(FoundationModels)
         let model = SystemLanguageModel.default
         guard case .available = model.availability else {
-            Diagnostics.log("llm: modelo no disponible (\(statusDescription))")
+            Diagnostics.log("llm: model unavailable (\(statusDescription))")
             return nil
         }
 
@@ -124,18 +124,18 @@ enum PostProcessor {
     }
 
     private static let instructions = """
-    Eres un posprocesador de dictado por voz. Recibes una transcripción cruda y \
-    devuelves exactamente el mismo contenido, pero limpio:
+    You are a voice-dictation post-processor. You receive a raw transcript and \
+    return exactly the same content, cleaned up:
 
-    - Corrige puntuación, mayúsculas y espacios.
-    - Quita muletillas y titubeos ("eh", "um", "ehh", "este", "o sea", "pues" \
-    cuando no aportan significado) y repeticiones accidentales.
-    - Separa en párrafos u oraciones cuando el texto sea largo.
-    - NO traduzcas. NO resumas. NO agregues información nueva. NO cambies el \
-    orden de las ideas ni el vocabulario técnico. NO respondas a lo que dice el texto.
-    - Mantén el idioma original (puede venir mezclado español/inglés).
+    - Fix punctuation, capitalisation and spacing.
+    - Remove filler words and stutters ("um", "uh", "like", "you know", "o sea", \
+    "pues") only where they carry no meaning, and accidental repetitions.
+    - Split into sentences or paragraphs when the text is long.
+    - Do NOT translate. Do NOT summarise. Do NOT add new information. Do NOT \
+    reorder ideas or change technical vocabulary. Do NOT answer what the text says.
+    - Keep the original language (it may mix Spanish and English).
 
-    Devuelve únicamente el texto final: sin comillas, sin prefacios, sin explicaciones.
+    Return only the final text: no quotes, no preamble, no explanations.
     """
 
     /// Rejects obvious model failures (refusals, chit-chat, truncation).
@@ -151,8 +151,8 @@ enum PostProcessor {
             text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Drop a leading "Aquí está el texto limpio:" style preamble.
-        let preambles = ["aquí está el texto", "texto limpio:", "texto corregido:", "here is the"]
+        // Drop a leading "Here is the cleaned text:" style preamble.
+        let preambles = ["here is the", "cleaned text:", "corrected text:"]
         let lowercase = text.lowercased()
         for preamble in preambles where lowercase.hasPrefix(preamble) {
             if let newline = text.firstIndex(of: "\n") {
@@ -165,7 +165,7 @@ enum PostProcessor {
         let cleanedWords = text.split(whereSeparator: { $0.isWhitespace }).count
 
         guard !text.isEmpty else {
-            Diagnostics.log("llm: salida vacía, uso texto crudo")
+            Diagnostics.log("llm: empty output, using raw text")
             return nil
         }
         if originalWords > 4 {
@@ -173,7 +173,7 @@ enum PostProcessor {
             // never grow much — both cases mean the model invented or dropped content.
             guard Double(cleanedWords) >= Double(originalWords) * 0.5,
                   Double(cleanedWords) <= Double(originalWords) * 1.8 else {
-                Diagnostics.log("llm: descartado (\(originalWords) -> \(cleanedWords) palabras), uso texto crudo")
+                Diagnostics.log("llm: rejected (\(originalWords) -> \(cleanedWords) words), using raw text")
                 return nil
             }
         }

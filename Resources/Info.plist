@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>es</string>
+    <string>en</string>
     <key>CFBundleExecutable</key>
     <string>WhisperFlow</string>
     <key>CFBundleIdentifier</key>
@@ -17,9 +17,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.5.0</string>
+    <string>0.6.0</string>
     <key>CFBundleVersion</key>
-    <string>15</string>
+    <string>16</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
@@ -27,8 +27,8 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>WhisperFlow graba tu voz solo mientras mantienes fn, para transcribirla en tu propio Mac.</string>
+    <string>WhisperFlow records your voice only while you hold fn, to transcribe it on your own Mac.</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>WhisperFlow necesita escuchar la tecla fn y escribir el texto dictado en la app que estés usando.</string>
+    <string>WhisperFlow listens for the fn key and types the dictated text into the app you are using.</string>
 </dict>
 </plist>

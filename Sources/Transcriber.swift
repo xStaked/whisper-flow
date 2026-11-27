@@ -11,17 +11,17 @@ enum TranscriberError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingBinary(let path):
-            return "No encuentro whisper-cli en \(path.isEmpty ? "(ruta vacía)" : path). Compila con ./build.sh o edita config.json."
+            return "Cannot find whisper-cli at \(path.isEmpty ? "(empty path)" : path). Build with ./build.sh or edit config.json."
         case .missingModel(let path):
-            return "No encuentro el modelo en \(path.isEmpty ? "(ruta vacía)" : path). Descárgalo con ./download-model.sh."
+            return "Cannot find the model at \(path.isEmpty ? "(empty path)" : path). Download it with ./download-model.sh."
         case .ffmpegFailed(let detail):
-            return "ffmpeg falló: \(detail)"
+            return "ffmpeg failed: \(detail)"
         case .whisperFailed(let code, let detail):
-            return "whisper-cli falló (código \(code)): \(detail)"
+            return "whisper-cli failed (code \(code)): \(detail)"
         case .timedOut(let label):
-            return "\(label) se quedó colgado y lo cancelé."
+            return "\(label) hung and was cancelled."
         case .emptyResult:
-            return "No se entendió nada en el audio."
+            return "Nothing intelligible in the audio."
         }
     }
 }
@@ -68,7 +68,7 @@ final class Transcriber {
         try runWhisper(args: args)
 
         guard let raw = try? String(contentsOfFile: outputBase + ".txt", encoding: .utf8) else {
-            throw TranscriberError.whisperFailed(0, "no se generó el archivo de texto")
+            throw TranscriberError.whisperFailed(0, "no text file was produced")
         }
         let text = Self.clean(raw)
         guard !text.isEmpty else { throw TranscriberError.emptyResult }
@@ -121,7 +121,7 @@ final class Transcriber {
         }
 
         if process.isRunning {
-            Diagnostics.log("\(label): sin respuesta tras \(Int(timeout))s, terminando")
+            Diagnostics.log("\(label): no response after \(Int(timeout))s, terminating")
             process.terminate()
             usleep(500_000)
             if process.isRunning {

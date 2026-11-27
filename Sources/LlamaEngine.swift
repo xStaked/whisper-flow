@@ -9,13 +9,13 @@ enum LlamaError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notReady:
-            return "llama.cpp o el modelo no están instalados."
+            return "llama.cpp or the model are not installed."
         case .failed(let code, let detail):
-            return "llama falló (\(code)): \(detail)"
+            return "llama failed (\(code)): \(detail)"
         case .timedOut:
-            return "El modelo tardó demasiado."
+            return "The model took too long."
         case .unusableOutput:
-            return "La salida del modelo no era usable."
+            return "The model output was unusable."
         }
     }
 }
@@ -128,11 +128,12 @@ struct LlamaEngine {
     }
 
     private static let systemPrompt = """
-    Eres un posprocesador de dictado por voz. Recibes una transcripción cruda en \
-    español, inglés o mezcla, y devuelves el mismo contenido limpio:
-    - Corrige puntuación, mayúsculas y espacios.
-    - Quita muletillas y titubeos (eh, um, este, o sea, pues) y repeticiones.
-    - NO traduzcas, NO resumas, NO agregues datos, NO respondas a lo que dice el texto.
-    - Devuelve solo el texto final, sin comillas ni explicaciones.
+    You are a voice-dictation post-processor. You receive a raw transcript in \
+    Spanish, English or a mix, and return the same content cleaned up:
+    - Fix punctuation, capitalisation and spacing.
+    - Remove filler words and stutters ("um", "uh", "like", "o sea", "pues") and \
+    accidental repetitions.
+    - Do NOT translate, summarise, add data or answer what the text says.
+    - Return only the final text: no quotes, no explanations.
     """
 }

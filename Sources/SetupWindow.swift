@@ -32,7 +32,7 @@ final class SetupWindowController: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "Permisos de WhisperFlow"
+        window.title = "WhisperFlow permissions"
         window.isReleasedWhenClosed = false
         window.center()
 
@@ -41,28 +41,28 @@ final class SetupWindowController: NSObject {
         content.blendingMode = .behindWindow
         content.state = .active
 
-        let title = NSTextField(wrappingLabelWithString: "WhisperFlow necesita dos permisos para funcionar:")
+        let title = NSTextField(wrappingLabelWithString: "WhisperFlow needs two permissions to work:")
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.translatesAutoresizingMaskIntoConstraints = false
 
         let axRow = PermissionRowView(
-            title: "Accesibilidad",
-            detail: "Para escuchar la tecla fn y escribir el texto en otras apps.",
+            title: "Accessibility",
+            detail: "To hear the fn key and type text into other apps.",
             settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         )
 
         let micRow = PermissionRowView(
-            title: "Micrófono",
-            detail: "Para grabar tu voz mientras mantienes fn.",
+            title: "Microphone",
+            detail: "To record your voice while you hold fn.",
             settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         )
 
         let hint = NSTextField(wrappingLabelWithString: """
-        Si WhisperFlow no aparece en la lista, pulsa el botón: se abre el panel \
-        correcto y la app queda registrada. Después actívala con el interruptor.
+        If WhisperFlow is not in the list, press the button: it opens the right \
+        panel and registers the app. Then switch it on.
 
-        Si al mantener fn se abre el emoji, ve a Ajustes → Teclado → \
-        "Presionar 🌐 para" → No hacer nada.
+        If holding fn opens the emoji picker, go to Settings → Keyboard → \
+        "Press 🌐 to" → Do Nothing.
         """)
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
@@ -107,7 +107,7 @@ final class SetupWindowController: NSObject {
         if ax && mic {
             timer?.invalidate()
             timer = nil
-            Diagnostics.log("permisos: ambos concedidos")
+            Diagnostics.log("permissions: both granted")
             onReady?()
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.window?.close()
@@ -137,7 +137,7 @@ final class PermissionRowView: NSView {
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let button = NSButton(title: "Abrir Ajustes", target: self, action: #selector(openSettings(_:)))
+        let button = NSButton(title: "Open Settings", target: self, action: #selector(openSettings(_:)))
         button.bezelStyle = .rounded
         button.controlSize = .small
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -170,13 +170,13 @@ final class PermissionRowView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) no implementado") }
 
     func setGranted(_ granted: Bool) {
-        statusLabel.stringValue = granted ? "concedido ✓" : "falta ✗"
+        statusLabel.stringValue = granted ? "granted ✓" : "missing ✗"
         statusLabel.textColor = granted ? .systemGreen : .systemRed
     }
 
     @objc private func openSettings(_ sender: NSButton) {
         guard let raw = sender.identifier?.rawValue, let url = URL(string: raw) else { return }
-        Diagnostics.log("permisos: abriendo \(raw)")
+        Diagnostics.log("permissions: opening \(raw)")
         NSWorkspace.shared.open(url)
     }
 }

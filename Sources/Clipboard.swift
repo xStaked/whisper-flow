@@ -29,7 +29,7 @@ enum Clipboard {
     /// Copy now, no restore, no surprises.
     static func copy(_ text: String) {
         write(text)
-        Diagnostics.log("portapapeles: copiado (\(text.count) caracteres)")
+        Diagnostics.log("clipboard: copied (\(text.count) characters)")
     }
 
     static func currentText() -> String? {
@@ -48,11 +48,11 @@ enum Clipboard {
             lock.unlock()
 
             guard unchanged, currentText() == text else {
-                Diagnostics.log("portapapeles: no se restaura, hubo una copia nueva")
+                Diagnostics.log("clipboard: not restoring, a newer copy happened")
                 return
             }
             write(previous)
-            Diagnostics.log("portapapeles: restaurado el contenido anterior")
+            Diagnostics.log("clipboard: previous content restored")
         }
     }
 }

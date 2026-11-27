@@ -56,13 +56,13 @@ final class DictationCardView: NSView {
         actions.translatesAutoresizingMaskIntoConstraints = false
         actions.alphaValue = 0
 
-        let copy = iconButton("doc.on.doc", tooltip: "Copiar") { [weak self] in
+        let copy = iconButton("doc.on.doc", tooltip: "Copy") { [weak self] in
             guard let self else { return }
             Clipboard.copy(self.entry.text)
             self.onCopied?()
             self.flashCopy()
         }
-        let edit = iconButton("square.and.pencil", tooltip: "Copiar y editar") { [weak self] in
+        let edit = iconButton("square.and.pencil", tooltip: "Copy and edit") { [weak self] in
             guard let self else { return }
             Clipboard.copy(self.entry.text)
             self.onCopied?()
@@ -144,7 +144,7 @@ final class DictationCardView: NSView {
     }
 
     private func flashCopy() {
-        timeLabel.stringValue = "✓ copiado"
+        timeLabel.stringValue = "✓ copied"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             guard let self else { return }
             let formatter = DateFormatter()

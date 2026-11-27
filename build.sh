@@ -9,7 +9,7 @@ RES="$APP/Contents/Resources"
 MODEL="$ROOT/models/ggml-large-v3-turbo-q5_0.bin"
 WHISPER_BIN="$ROOT/vendor-whisper/build/bin/whisper-cli"
 
-echo "==> limpiando"
+echo "==> cleaning"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$RES"
 mkdir -p "$ROOT/build/tmp" "$ROOT/build/modulecache"
@@ -19,7 +19,7 @@ mkdir -p "$ROOT/build/tmp" "$ROOT/build/modulecache"
 export TMPDIR="$ROOT/build/tmp"
 MODULE_CACHE="$ROOT/build/modulecache"
 
-echo "==> compilando Swift"
+echo "==> compiling Swift"
 swiftc -O -swift-version 5 \
     -target arm64-apple-macos13.0 \
     -module-cache-path "$MODULE_CACHE" \
@@ -31,14 +31,14 @@ swiftc -O -swift-version 5 \
     -o "$BIN" \
     "$ROOT/Sources/"*.swift
 
-echo "==> empaquetando"
+echo "==> packaging"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 
 if [[ -x "$WHISPER_BIN" ]]; then
     cp "$WHISPER_BIN" "$RES/whisper-cli"
     WHISPER_PATH="$RES/whisper-cli"
 else
-    echo "    (aviso) no está $WHISPER_BIN — se usará el que haya instalado en el sistema"
+    echo "    (warning) $WHISPER_BIN is missing — will use the one installed on the system"
     WHISPER_PATH=""
 fi
 
@@ -51,7 +51,7 @@ python3 - "$MODEL" "$WHISPER_PATH" "$FFMPEG" "$RES/runtime-defaults.json" <<'PY'
 import json, sys, os
 model, whisper, ffmpeg, out = sys.argv[1:5]
 data = {
-    "language": "es",
+    "language": "en",
     "modelPath": model if os.path.exists(model) else "",
     "whisperBinaryPath": whisper,
     "ffmpegPath": ffmpeg or "/opt/homebrew/bin/ffmpeg",
@@ -65,7 +65,7 @@ with open(out, "w") as handle:
 print("    runtime-defaults.json:", data["modelPath"] or "(modelo no encontrado)")
 PY
 
-echo "==> firmando"
+echo "==> signing"
 # Sign with the user's Apple Development certificate when available: an ad-hoc
 # signature changes on every build and makes macOS drop the microphone and
 # accessibility permissions each time.
@@ -73,22 +73,22 @@ SIGN_HASH="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple 
 
 sign_ad_hoc() {
     codesign --force --deep --sign - "$APP" 2>/dev/null \
-        || echo "    (aviso) no se pudo firmar; la app igual corre"
+        || echo "    (warning) signing failed; the app still runs"
 }
 
 if [[ -z "$SIGN_HASH" ]]; then
-    echo "    sin certificado Apple Development: firma ad-hoc"
-    echo "    (los permisos de macOS se reinician en cada build)"
+    echo "    no Apple Development certificate: ad-hoc signature"
+    echo "    (macOS permissions reset on every build)"
     sign_ad_hoc
 else
-    echo "    identidad: $SIGN_HASH"
+    echo "    identity: $SIGN_HASH"
     # codesign can block forever behind a keychain prompt. Never hang the build.
     if perl -e 'alarm shift; exec @ARGV' 20 \
         codesign --force --deep --sign "$SIGN_HASH" "$APP" 2>/dev/null; then
-        echo "    firmada"
+        echo "    signed"
     else
-        echo "    (aviso) firma con certificado bloqueada; se usa ad-hoc"
-        echo "    desbloqueá el llavero y recompilá para conservar los permisos"
+        echo "    (warning) certificate signing blocked; using ad-hoc"
+        echo "    unlock the keychain and rebuild to keep the permissions"
         sign_ad_hoc
     fi
 fi
@@ -96,4 +96,4 @@ fi
 # Refresh Launch Services so Finder/Spotlight see the new bundle.
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" 2>/dev/null || true
 
-echo "==> listo: $APP"
+echo "==> done: $APP"

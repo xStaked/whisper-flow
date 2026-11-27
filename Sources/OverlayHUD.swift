@@ -57,7 +57,7 @@ final class OverlayHUD {
         waveform?.isHidden = true
         timeLabel?.isHidden = true
         statusLabel?.isHidden = false
-        statusLabel?.stringValue = "transcribiendo…"
+        statusLabel?.stringValue = "transcribing…"
         statusLabel?.textColor = NSColor.white.withAlphaComponent(0.85)
         iconView?.image = symbol("waveform", tint: .systemOrange)
 
@@ -110,7 +110,7 @@ final class OverlayHUD {
         waveform?.isHidden = true
         timeLabel?.isHidden = true
         statusLabel?.isHidden = false
-        statusLabel?.stringValue = "copiado al portapapeles"
+        statusLabel?.stringValue = "copied to clipboard"
         statusLabel?.textColor = .systemTeal
         iconView?.image = symbol("doc.on.clipboard.fill", tint: .systemTeal)
 

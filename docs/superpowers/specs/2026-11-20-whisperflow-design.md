@@ -1,165 +1,170 @@
-# WhisperFlow — diseño
+# WhisperFlow — design
 
-Fecha: 2026-11-20
-Estado: implementado (v0.1.0)
+Date: 2026-11-20
+Status: implemented (v0.1.0)
 
-## Problema
+## Problem
 
-Wispr Flow es de pago (~12 USD/mes) y manda el audio a la nube. Se quiere lo
-mismo —mantener una tecla, hablar, y que el texto aparezca en la app activa—
-pero gratis, offline y sin cuenta.
+Wispr Flow is paid (~12 USD/month) and sends audio to the cloud. We want the same
+thing — hold a key, speak, and have the text appear in the active app — but free,
+offline and without an account.
 
-## Alcance del MVP
+## MVP scope
 
-Dentro:
+In:
 
-- Hotkey global: mantener `fn` para grabar, soltar para transcribir.
-- Transcripción 100% local con `whisper.cpp`.
-- Inserción del texto en la app enfocada.
-- Panel flotante con los últimos textos y botón de copiar, como red de seguridad.
-- Icono en la barra de menús con estado (listo / grabando / transcribiendo).
+- Global hotkey: hold `fn` to record, release to transcribe.
+- 100% local transcription with `whisper.cpp`.
+- Insert the text into the focused app.
+- Floating panel with recent texts and a copy button, as a safety net.
+- Menu bar icon with state (idle / recording / transcribing).
 
-Fuera (a propósito):
+Out (on purpose):
 
-- Reescritura con LLM, comandos de voz, puntuación configurable.
-- Corrección de estilo, sinónimos, "flow" por app.
-- Auto-update, notarización, App Store.
-- Atajo configurable desde UI (se cambia en código si algún día hace falta).
+- LLM rewriting, voice commands, configurable punctuation.
+- Style correction, synonyms, per-app "flow".
+- Auto-update, notarisation, App Store.
+- Hotkey configurable from the UI (changed in code if it ever matters).
 
-## Decisiones
+## Decisions
 
-### 1. App nativa Swift, no script
+### 1. Native Swift app, not a script
 
-Los permisos de macOS (micrófono, accesibilidad) se otorgan por identidad de
-bundle. Un script de Python corrido desde Terminal queda atado a Terminal, y el
-hotkey global se vuelve frágil. Un bundle real obtiene TCC limpio y arranca solo.
+macOS permissions (microphone, accessibility) are granted per bundle identity. A
+Python script run from Terminal stays tied to Terminal and the global hotkey
+becomes fragile. A real bundle gets clean TCC and can start by itself.
 
-### 2. `whisper.cpp`, no Apple Speech
+### 2. `whisper.cpp`, not Apple Speech
 
-Calidad claramente mejor, multilingüe de verdad, y el modelo no depende de la
-red ni de que Apple habilite on-device para tu locale. Costo: 547 MB de modelo.
+Clearly better quality, genuinely multilingual, and the model depends neither on
+the network nor on Apple enabling on-device for your locale. Cost: a 547 MB model.
 
-Se compila desde el repo vendorizado con un cmake portable dentro del proyecto,
-porque el entorno no permite escribir fuera del workspace ni instalar Homebrew.
+It is built from the vendored repo with a portable cmake inside the project,
+because the environment allows neither writing outside the workspace nor
+installing Homebrew.
 
-### 3. `fn` como tecla
+### 3. `fn` as the key
 
-`fn` sola no genera caracteres, así que es la tecla ideal para push-to-talk. El
-event tap la intercepta a nivel HID y **traga** los `flagsChanged` para que
-macOS no abra el emoji picker. Cualquier otra tecla mientras `fn` está
-presionada cancela la grabación, así `fn`+flechas y `fn`+F3 siguen funcionando.
+`fn` alone produces no characters, which makes it the ideal push-to-talk key. The
+event tap intercepts it at HID level and **swallows** the `flagsChanged` events so
+macOS does not open the emoji picker. Any other key while `fn` is held cancels the
+recording, so `fn`+arrows and `fn`+F3 keep working.
 
-### 4. Inserción en dos capas
+### 4. Two-layer insertion
 
-1. Eventos Unicode (`CGEventKeyboardSetUnicodeString`) en trozos de 20 unidades
-   UTF-16, sin tocar el portapapeles.
-2. Verificación por Accessibility: se compara la posición del caret antes y
-   después. Si no cambió, se reintenta con portapapeles + ⌘V y se restaura el
-   portapapeles 0.6 s después.
+1. Unicode events (`CGEventKeyboardSetUnicodeString`) in 20 UTF-16-unit chunks,
+   without touching the clipboard.
+2. Accessibility verification: the caret position is compared before and after. If
+   it did not move, it retries with clipboard + ⌘V and restores the clipboard
+   0.6 s later.
 
-Si ninguna capa se puede verificar, se abre el panel: el texto nunca se pierde.
+If neither layer can be verified, the panel opens: the text is never lost.
 
-### 5. Panel no activante
+> **Superseded in v0.3.5:** synthetic unicode typing only ever delivered its first
+> chunk on macOS 26, so the order was inverted. A single atomic ⌘V is now the
+> primary path; see `TextInserter`.
 
-`NSPanel` con `.nonactivatingPanel` + `becomesKeyOnlyIfNeeded`. Cuando aparece
-porque la inserción falló, el foco se queda en la app donde estabas escribiendo;
-si el panel activara la app, el texto iría al panel y se perdería el destino.
+### 5. Non-activating panel
 
-## Flujo de datos
+`NSPanel` with `.nonactivatingPanel` + `becomesKeyOnlyIfNeeded`. When it appears
+because insertion failed, focus stays in the app you were typing into; if the panel
+activated the app, the text would go to the panel and the destination would be lost.
+
+## Data flow
 
 ```
 CGEventTap (flagsChanged, fn)
-  └─ onPress   → AudioRecorder.start()  → AVAudioEngine tap → [Float] en memoria
-  └─ onRelease → AudioRecorder.stop()   → WAV 16-bit mono en temp
+  └─ onPress   → AudioRecorder.start()  → AVAudioEngine tap → [Float] in memory
+  └─ onRelease → AudioRecorder.stop()   → 16-bit mono WAV in temp
                     └─ Transcriber: ffmpeg -ar 16000 -ac 1 → whisper-cli → .txt
-                         └─ clean() quita [BLANK_AUDIO], [MUSIC], etc.
+                         └─ clean() drops [BLANK_AUDIO], [MUSIC], etc.
                               └─ TranscriptStore.add()
-                                   └─ TextInserter.insert() → éxito? → fin
-                                                            → fallo  → panel.show()
+                                   └─ TextInserter.insert() → success? → done
+                                                            → failure  → panel.show()
   └─ onCancel  → AudioRecorder.cancel()
 ```
 
-## Errores y estados
+## Errors and states
 
-| Situación | Comportamiento |
+| Situation | Behaviour |
 |---|---|
-| Sin permiso de micrófono | Alerta con botón a Ajustes. |
-| Sin Accesibilidad | Alerta + reintento cada 2 s hasta que se conceda. |
-| Audio vacío / < 0.3 s | No hace nada, vuelve a idle. |
-| Whisper no entiende nada | Descarta el resultado (no inserta basura). |
-| ffmpeg/whisper fallan | El panel se abre con el mensaje en rojo. |
-| Inserción no verificable | Paneles abre con el texto para copiar. |
-| Grabación > 120 s | Corta sola y transcribe. |
+| No microphone permission | Alert with a button to Settings. |
+| No Accessibility | Alert + retry every 2 s until granted. |
+| Empty audio / < 0.3 s | Does nothing, back to idle. |
+| Whisper understands nothing | Discards the result (never inserts junk). |
+| ffmpeg/whisper fail | The panel opens with the message in red. |
+| Insertion not verifiable | The panel opens with the text to copy. |
+| Recording > 120 s | Stops by itself and transcribes. |
 
-## Estructura
+## Structure
 
 ```
 WhisperFlow/
-├── Sources/            # 8 archivos Swift, uno por responsabilidad
+├── Sources/            # Swift files, one responsibility each
 ├── Resources/Info.plist
-├── build.sh            # compila + empaqueta + firma ad-hoc
+├── build.sh            # compile + package + sign
 ├── download-model.sh
 ├── models/             # gitignored, 547 MB
-└── vendor-whisper/     # gitignored, checkout de whisper.cpp
+└── vendor-whisper/     # gitignored, whisper.cpp checkout
 ```
 
-## Verificación hecha
+## Verification done
 
-- `say` → ffmpeg → `whisper-cli`: transcripción exacta en inglés y español.
-- Latencia medida: 1.83 s (2.3 s de audio) y 1.93 s (9 s de audio) con idioma
-  fijo; 3.34 s / 3.43 s con `auto`.
-- La app arranca, resuelve rutas y escribe `config.json` correctamente.
-- Pendiente de prueba manual: hotkey `fn` real, permisos TCC, inserción en apps
-  de terceros (requiere interacción humana).
+- `say` → ffmpeg → `whisper-cli`: exact transcription in English and Spanish.
+- Measured latency: 1.83 s (2.3 s audio) and 1.93 s (9 s audio) with a fixed
+  language; 3.34 s / 3.43 s with `auto`.
+- The app launches, resolves paths and writes `config.json` correctly.
+- Manual testing pending: real `fn` hotkey, TCC permissions, insertion into
+  third-party apps (needs human interaction).
 
 ---
 
-# Anexo: limpieza del texto con IA (v0.2.0)
+# Appendix: AI text cleanup (v0.2.0)
 
-## Objetivo
+## Goal
 
-Wispr Flow no solo transcribe: pasa el texto por un LLM que quita muletillas,
-arregla puntuación y separa oraciones. Se quería lo mismo, local.
+Wispr Flow does not only transcribe: it runs the text through an LLM that removes
+fillers, fixes punctuation and splits sentences. We wanted the same, locally.
 
-## Hallazgo: Apple Intelligence no está disponible
+## Finding: Apple Intelligence is not available
 
-`FoundationModels.framework` existe en macOS 26, pero al consultar
-`SystemLanguageModel.default.availability` devuelve
-`appleIntelligenceNotEnabled`: el modelo on-device está apagado y en la región
-del usuario no está habilitado. El código quedó escrito y se usa solo si algún
-día está disponible; no es el camino principal.
+`FoundationModels.framework` exists on macOS 26, but asking
+`SystemLanguageModel.default.availability` returns `appleIntelligenceNotEnabled`:
+the on-device model is off and not enabled in the user's region. The code is in
+place and is used only if it ever becomes available; it is not the main path.
 
-## Decisión: llama.cpp con modelo GGUF
+## Decision: llama.cpp with a GGUF model
 
-- Binario precompilado oficial (`llama-b12589-bin-macos-arm64`), que **sí trae
-  Metal** — a diferencia de whisper.cpp, que en esta máquina hubo que compilar
-  sin GPU por falta del compilador de shaders.
-- Modelo `Qwen2.5-3B-Instruct-Q4_K_M` (~1.8 GB): buen español, sigue
-  instrucciones y conserva números/vocabulario técnico.
-- Se invoca `llama-completion` (no `llama-cli`) con el template ChatML armado a
-  mano: así stdout es solo la respuesta, sin banner ni bucle interactivo.
-- `PostProcessor.sanitize` descarta la salida si difiere demasiado del original
-  (menos de la mitad o más del doble de palabras), si viene vacía o si trae
-  preámbulos tipo "Aquí está el texto limpio:". En ese caso gana el texto crudo.
+- Official prebuilt binary (`llama-b12589-bin-macos-arm64`), which **does ship
+  Metal** — unlike whisper.cpp, which had to be built without a GPU on this machine
+  because the shader compiler was missing.
+- `Qwen2.5-3B-Instruct-Q4_K_M` (~1.8 GB): good Spanish, follows instructions and
+  preserves numbers and technical vocabulary.
+- It calls `llama-completion` (not `llama-cli`) with a hand-built ChatML template,
+  so stdout is only the answer — no banner, no interactive loop.
+- `PostProcessor.sanitize` rejects output that differs too much from the original
+  (less than half or more than double the words), comes back empty, or carries a
+  preamble like "Here is the cleaned text:". In that case the raw text wins.
 
-## Por qué hay dos motores
+## Why two engines
 
-Cargar 1.8 GB cuesta **~4.5 s** por dictado (medido: GPU 4.6 s, CPU 6.1 s, con
-solo 0.3 s de diferencia entre cargar y generar). Eso es demasiado para el uso
-normal, así que:
+Loading 1.8 GB costs **~4.5 s** per dictation (measured: 4.6 s GPU, 6.1 s CPU,
+with only 0.3 s difference between loading and generating). That is too much for
+normal use, so:
 
-- **Reglas** (`RulesCleaner`): regex determinista, <10 ms, sin modelos. Quita
-  `eh/um/mmm`, corrige espacios, mayúsculas y punto final. No reescribe.
-- **IA local**: la limpieza real, opt-in, para dictados largos.
+- **Rules** (`RulesCleaner`): deterministic regex, <10 ms, no models. Drops
+  `eh/um/mmm`, fixes spacing, capitalisation and the final period. No rewriting.
+- **Local AI**: the real cleanup, opt-in, for long dictations.
 
-Se descartó mantener un `llama-server` residente: daría ~1 s por dictado pero
-dejaría ~2.5 GB de RAM ocupados en reposo, justo lo contrario del diseño.
+Keeping a resident `llama-server` was ruled out: it would give ~1 s per dictation
+but hold ~2.5 GB of RAM at rest — the exact opposite of the design.
 
-## Verificación
+## Verification
 
-- `llama-completion` con template ChatML: quitó "pues"/"o sea", puso puntuación
-  y separó oraciones sin alterar los números (29.5 / 13.5 / 18.5 / 40 / 60).
+- `llama-completion` with a ChatML template: removed "pues"/"o sea", added
+  punctuation and split sentences without altering the numbers (29.5 / 13.5 /
+  18.5 / 40 / 60).
 - `RulesCleaner`: "eh hola  eh  como estas ,  quiero..." → "Hola como estas,
   quiero...".
-- La app arrancó tras recompilar con **los permisos intactos**, gracias a firmar
-  con el certificado Apple Development en vez de ad-hoc.
+- The app launched after rebuilding with **permissions intact**, thanks to signing
+  with the Apple Development certificate instead of ad-hoc.

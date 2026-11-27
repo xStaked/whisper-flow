@@ -35,7 +35,7 @@ final class FnKeyMonitor {
     func start() -> Bool {
         guard tap == nil else { return true }
         guard AXIsProcessTrusted() else {
-            Diagnostics.log("tap: NO instalado (sin permiso de accesibilidad)")
+            Diagnostics.log("tap: NOT installed (no Accessibility permission)")
             return false
         }
 
@@ -48,7 +48,7 @@ final class FnKeyMonitor {
             callback: fnEventCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            Diagnostics.log("tap: CGEvent.tapCreate devolvió nil")
+            Diagnostics.log("tap: CGEvent.tapCreate returned nil")
             return false
         }
 
@@ -57,7 +57,7 @@ final class FnKeyMonitor {
         self.source = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        Diagnostics.log("tap: instalado correctamente")
+        Diagnostics.log("tap: installed successfully")
         return true
     }
 
@@ -76,7 +76,7 @@ final class FnKeyMonitor {
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            Diagnostics.log("tap: deshabilitado (\(type == .tapDisabledByTimeout ? "timeout" : "user input")), reintentando")
+            Diagnostics.log("tap: disabled (\(type == .tapDisabledByTimeout ? "timeout" : "user input")), retrying")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             if fnHeld {
                 fnHeld = false

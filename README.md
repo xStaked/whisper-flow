@@ -1,273 +1,283 @@
 # WhisperFlow
 
-Dictado por voz, **gratis y 100% local**, para macOS. Mantienes la tecla `fn`,
-hablas, sueltas — y el texto aparece en la app donde tengas el cursor.
+Free, **100% local** voice dictation for macOS. Hold the `fn` key, speak, release —
+and the text appears in whatever app has the cursor.
 
-Es un clon minimalista de Wispr Flow sin suscripción: el audio nunca sale de tu
-Mac, no hay cuenta, no hay nube.
+A minimalist clone of Wispr Flow with no subscription: your audio never leaves your
+Mac, there is no account, there is no cloud.
 
 ```
-mantén fn ──► graba ──► whisper.cpp local ──► [limpieza opcional] ──► escribe el texto
-                                                              └──► panel (si falla)
+hold fn ──► record ──► local whisper.cpp ──► [optional cleanup] ──► type the text
+                                                              └──► panel (if it fails)
 ```
 
-## Qué hay aquí
+## What's in here
 
-| Archivo | Qué hace |
+| File | What it does |
 |---|---|
-| `Sources/FnKeyMonitor.swift` | Escucha `fn` con un event tap de bajo nivel y lo traga para que macOS no abra el emoji picker. Otra tecla mientras `fn` está presionada = cancela. |
-| `Sources/AudioRecorder.swift` | `AVAudioEngine` (uno nuevo por grabación) → samples en memoria → WAV 16-bit mono. |
-| `Sources/Transcriber.swift` | `ffmpeg` a 16 kHz + `whisper-cli` + limpieza de alucinaciones. Timeouts duros. |
-| `Sources/TextInserter.swift` | Pega con un ⌘V atómico (imposible que llegue a medias) y verifica por Accessibility solo cuando el dato es fiable. |
-| `Sources/RulesCleaner.swift` | Limpieza instantánea: quita muletillas, arregla espacios, mayúsculas y punto final. |
-| `Sources/LlamaEngine.swift` | Limpieza con LLM local (llama.cpp + Metal). |
-| `Sources/PostProcessor.swift` | Cadena de limpieza: Apple Intelligence → llama.cpp → texto crudo, con salvaguardas. |
-| `Sources/TranscriptPanel.swift` | Panel flotante que no roba el foco, con los últimos 20 textos y botón "Copiar último". |
-| `Sources/TranscriptStore.swift` | Historial persistente en JSON (50 entradas). |
-| `Sources/Diagnostics.swift` | Log en `~/Library/Application Support/WhisperFlow/whisperflow.log`. |
-| `Sources/AppDelegate.swift` | Icono de barra de menús, estados, permisos, menú. |
+| `Sources/FnKeyMonitor.swift` | Watches `fn` through a low-level event tap and swallows it so macOS doesn't open the emoji picker. Any other key while `fn` is held cancels. |
+| `Sources/AudioRecorder.swift` | `AVAudioEngine` (a fresh one per recording) → in-memory samples → 16-bit mono WAV. |
+| `Sources/Transcriber.swift` | `ffmpeg` to 16 kHz + `whisper-cli` + hallucination cleanup. Hard timeouts. |
+| `Sources/TextInserter.swift` | Pastes with a single atomic ⌘V (it cannot arrive half-written) and verifies through Accessibility only when that data is trustworthy. |
+| `Sources/RulesCleaner.swift` | Instant cleanup: drops fillers, fixes spacing, capitalisation and the final period. |
+| `Sources/LlamaEngine.swift` | Cleanup with a local LLM (llama.cpp + Metal). |
+| `Sources/PostProcessor.swift` | Cleanup chain: Apple Intelligence → llama.cpp → raw text, with guard rails. |
+| `Sources/MainWindow.swift` | The main app window: sidebar, dictations grouped by day, stats, search. |
+| `Sources/DictationCardView.swift` | One dictation card: large readable text, timestamp, copy actions. |
+| `Sources/TranscriptPanel.swift` | Floating history panel that never steals focus. |
+| `Sources/Clipboard.swift` | Single owner of the system clipboard (prevents the "restore stole my copy" race). |
+| `Sources/TranscriptStore.swift` | Persistent JSON history (50 entries). |
+| `Sources/OverlayHUD.swift` | The floating pill with a real audio level meter. |
+| `Sources/Diagnostics.swift` | Log at `~/Library/Application Support/WhisperFlow/whisperflow.log`. |
+| `Sources/AppDelegate.swift` | Menu bar icon, states, permissions, menu. |
 
-## Requisitos
+## Requirements
 
-Nada de esto se instala solo, y **no hay Ollama, ni daemon, ni nube**: todo corre
-sobre binarios nativos.
+None of this installs itself, and there is **no Ollama, no daemon, no cloud**:
+everything runs on native binaries.
 
-| Qué | Para qué | Cómo se obtiene | Peso |
+| What | Why | How to get it | Size |
 |---|---|---|---|
-| macOS 13+ (Apple Silicon recomendado) | Sistema | — | — |
-| Command Line Tools de Xcode | `swiftc`, para compilar la app | `xcode-select --install` | ~1 GB |
-| `ffmpeg` | Convertir el audio a 16 kHz mono | `brew install ffmpeg` | ~80 MB |
-| cmake portable | Compilar whisper.cpp | `scripts/bootstrap.sh` | ~75 MB |
-| whisper.cpp (`whisper-cli`) | Transcribir | `scripts/bootstrap.sh` | ~83 MB |
-| `ggml-large-v3-turbo-q5_0.bin` | Modelo de voz | `scripts/bootstrap.sh` | 547 MB |
-| llama.cpp (`llama-completion`) | Limpieza con IA — opcional | `scripts/bootstrap.sh` | ~40 MB |
-| `Qwen2.5-3B-Instruct-Q4_K_M.gguf` | Limpieza con IA — opcional | `scripts/bootstrap.sh` | 1.8 GB |
+| macOS 13+ (Apple Silicon recommended) | OS | — | — |
+| Xcode Command Line Tools | `swiftc`, to build the app | `xcode-select --install` | ~1 GB |
+| `ffmpeg` | Resample audio to 16 kHz mono | `brew install ffmpeg` | ~80 MB |
+| Portable cmake | Build whisper.cpp | `scripts/bootstrap.sh` | ~75 MB |
+| whisper.cpp (`whisper-cli`) | Transcribe | `scripts/bootstrap.sh` | ~83 MB |
+| `ggml-large-v3-turbo-q5_0.bin` | Speech model | `scripts/bootstrap.sh` | 547 MB |
+| llama.cpp (`llama-completion`) | AI cleanup — optional | `scripts/bootstrap.sh` | ~40 MB |
+| `Qwen2.5-3B-Instruct-Q4_K_M.gguf` | AI cleanup — optional | `scripts/bootstrap.sh` | 1.8 GB |
 
-Total con limpieza IA: **~2.6 GB**. Sin la parte de IA: **~800 MB**.
+**~2.6 GB** with AI cleanup, **~800 MB** without it.
 
-> **Sobre Ollama:** no se usa en ninguna parte. El runtime de la limpieza es
-> `llama.cpp` (binario oficial con Metal) y el modelo es un `.gguf` suelto que se
-> pasa por argumento. Ollama agregaría un daemon propio, un puerto y un cliente
-> HTTP para hacer lo mismo.
+> **About Ollama:** it is not used anywhere. The cleanup runtime is `llama.cpp`
+> (official binary with Metal) and the model is a plain `.gguf` passed as an
+> argument. Ollama would add a daemon, a port and an HTTP client to do the same job.
 
-### Arranque rápido
+### Quick start
 
 ```bash
 git clone https://github.com/xStaked/whisper-flow.git
 cd whisper-flow
-./scripts/bootstrap.sh          # compila whisper.cpp, baja modelos, empaqueta la app
+./scripts/bootstrap.sh          # builds whisper.cpp, downloads models, packages the app
 open build/WhisperFlow.app
 ```
 
-El script es idempotente: si algo ya está descargado o compilado, lo saltea.
+The script is idempotent: anything already downloaded or built is skipped.
 
-## Compilar
+## Build
 
 ```bash
 ./build.sh
 open build/WhisperFlow.app
 ```
 
-`build.sh` compila el bundle Swift, copia `whisper-cli` dentro de la app y la firma
-con tu certificado **Apple Development** si existe (así los permisos de macOS
-sobreviven a cada recompilación).
+`build.sh` compiles the Swift bundle, copies `whisper-cli` into the app and signs it
+with your **Apple Development** certificate when one exists (that's what makes the
+macOS permissions survive rebuilds).
 
-Detalles que descubrimos usando esto a diario:
+Things we learned from using this daily:
 
-- La firma espera un **timeout de 20 s**. Si el llavero está bloqueado, `codesign`
-  se queda esperando un diálogo invisible y el build no terminaba nunca.
-- Si la firma con certificado no sale, cae a **ad-hoc** para que la app igual
-  funcione. Ojo: eso **borra los permisos de Accesibilidad** y hay que
-  concederlos otra vez. Desbloqueá el llavero antes de recompilar si querés
-  conservarlos.
-- No recompiles con la app corriendo: `codesign` se cuelga sobre un bundle en uso.
+- Signing has a **20 s timeout**. With a locked keychain, `codesign` waits forever
+  behind an invisible prompt and the build never finishes.
+- If certificate signing fails it falls back to **ad-hoc** so the app still runs.
+  Careful: that **wipes the Accessibility permission** and you have to grant it
+  again. Unlock your keychain before rebuilding if you want to keep it.
+- Don't rebuild while the app is running: `codesign` hangs on a bundle in use.
 
-Modelos:
+Models:
 
 ```bash
-./download-model.sh                                        # voz, ~547 MB
+./download-model.sh                                        # speech, ~547 MB
 curl -L -o models/Qwen2.5-3B-Instruct-Q4_K_M.gguf \
-  https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf   # limpieza IA, ~1.8 GB
+  https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf   # AI cleanup, ~1.8 GB
 ```
 
-## Arranque automático
+## Launch at login
 
 ```bash
-./scripts/install-login-item.sh          # arranca al iniciar sesión
-./scripts/install-login-item.sh --remove # quitar
+./scripts/install-login-item.sh          # start at login
+./scripts/install-login-item.sh --remove # uninstall
 ```
 
-Crea `~/Library/LaunchAgents/com.local.whisperflow.plist`, que lanza la app con
-`open -g` — **no** con el binario directo: ejecutar `Contents/MacOS/WhisperFlow`
-a mano deja el proceso vivo pero sin inicializar `NSApplication`, así que el
-hotkey nunca se instala.
+It creates `~/Library/LaunchAgents/com.local.whisperflow.plist`, which launches the
+app with `open -g` — **not** the raw binary: running `Contents/MacOS/WhisperFlow`
+directly leaves the process alive but `NSApplication` never initialises, so the
+hotkey is never installed.
 
-macOS lo lista en Ajustes → General → Ítems de inicio y extensiones.
+macOS lists it in Settings → General → Login Items & Extensions.
 
-## Permisos (una sola vez)
+## Permissions (one time only)
 
-1. **Micrófono** → permitir.
-2. **Accesibilidad** (Ajustes → Privacidad y seguridad → Accesibilidad) → activar
-   *WhisperFlow*. Sin esto no puede escuchar `fn` ni escribir texto.
+1. **Microphone** → allow.
+2. **Accessibility** (Settings → Privacy & Security → Accessibility) → enable
+   *WhisperFlow*. Without it the app can neither hear `fn` nor type text.
 
-Si al mantener `fn` se abre el selector de emojis:
-**Ajustes → Teclado → "Presionar 🌐 para" → No hacer nada**.
+If holding `fn` opens the emoji picker:
+**Settings → Keyboard → "Press 🌐 to" → Do Nothing**.
 
-La app trae una ventana de permisos que se actualiza en vivo y se cierra sola
-cuando ambos están concedidos.
+The app ships a permissions window that updates live and closes itself once both
+are granted.
 
-## Uso
+## Usage
 
-- **Mantén `fn`** y habla. Al soltar, transcribe y escribe.
-- **Clic** en el icono → panel con lo último dictado.
-- **Clic derecho** → menú: limpieza del texto, permisos, log, configuración, salir.
+- **Hold `fn`** and speak. On release it transcribes and types.
+- **Click** the icon → the main window.
+- **Right click** → menu: text cleanup, permissions, log, data folder, quit.
 
-Icono: micrófono = listo · rojo = grabando · naranja = transcribiendo.
+Icon: microphone = idle · red = recording · orange = transcribing.
 
-## Indicador en pantalla
+## On-screen indicator
 
-Mientras dictás aparece una píldora abajo al centro (100 px sobre el Dock):
+While dictating, a pill appears at the bottom centre (100 px above the Dock):
 
 ```
 ╭──────────────────────────╮
-│ 🎙  ▁▃▅▇▅▃▁▂▄▆▄▂   0:07  │   grabando
+│ 🎙  ▁▃▅▇▅▃▁▂▄▆▄▂   0:07  │   recording
 ╰──────────────────────────╯
 ```
 
-- **El waveform es tu voz real**, no una animación decorativa: mide RMS en dBFS
-  con ganancia adaptativa, así que responde igual con AirPods, con el micro interno
-  o con un USB, y no hace falta gritar para que se mueva.
-- **Cronómetro**, útil en dictados largos y para saber cuánto falta al corte de 120 s.
-- Al soltar cambia a `transcribiendo…`, después `✓ insertado` (o `revisá el panel`)
-  y desaparece solo.
-- Es **click-through y no activante**: los clics lo atraviesan y nunca roba el foco,
-  así el texto siempre cae en la app correcta. Funciona en fullscreen y en todos los Spaces.
-- Se apaga en **clic derecho → Indicador en pantalla** (o `showOverlay: false`).
+- **The waveform is your real voice**, not decoration: it measures RMS in dBFS with
+  adaptive gain, so it responds the same with AirPods, the built-in mic or a USB
+  one, and you don't have to shout to move it.
+- **A timer**, useful for long dictations and to see the 120 s cutoff coming.
+- On release it switches to `transcribing…`, then `✓ inserted` (or `check the panel`)
+  and disappears on its own.
+- It is **click-through and non-activating**: clicks pass through and it never
+  steals focus, so the text always lands in the right app. Works fullscreen and
+  across Spaces.
+- Turn it off in **right click → On-screen indicator** (or `showOverlay: false`).
 
-## La ventana principal
+## The main window
 
-Clic en el icono del menú abre **la app completa**, no una píldora:
+Clicking the menu icon opens **the full app**, not a pill:
 
 ```
 ┌────────────┬──────────────────────────────────────────┐
-│ ⚡ WhisperFlow │  Buenas tardes                        │
-│            │  [Buscar dictados]  3052  50  61  8      │
+│ ⚡ WhisperFlow │  Good afternoon                       │
+│            │  [Search dictations]  3052  50  61  8    │
 │ Home       │  ─────────────────────────────────────   │
-│ Insights   │  HOY                                     │
-│ Diccionario│  ┌────────────────────────────────────┐  │
-│ Ajustes    │  │ Tu dictado, a tamaño de lectura... │  │
+│ Insights   │  TODAY                                   │
+│ Dictionary │  ┌────────────────────────────────────┐  │
+│ Settings   │  │ Your dictation, at reading size... │  │
 │            │  │ 11:56                              │  │
 │            │  └────────────────────────────────────┘  │
 └────────────┴──────────────────────────────────────────┘
 ```
 
-- **Home**: dictados agrupados por día (Hoy / Ayer / fecha), con estadísticas.
-- **Insights**: totales de palabras, dictados y promedio.
-- **Diccionario**: las palabras que más usás en tus dictados.
-- **Buscar**: filtra al escribir, sin esperar.
-- Cada tarjeta: texto seleccionable, copiar con un clic o ⌘C.
+- **Home**: dictations grouped by day (Today / Yesterday / date), with stats.
+- **Insights**: word totals, dictation count and average.
+- **Dictionary**: the words you use most across your dictations.
+- **Search**: filters as you type, no waiting.
+- Every card: selectable text, copy with one click or ⌘C.
 
-## Dónde quedan tus textos
+## Where your text lives
 
-Todo vive en una sola carpeta, fuera del repo:
+Everything lives in one folder, outside the repo:
 
 ```
 ~/Library/Application Support/WhisperFlow/
-├── history.json        # los últimos 50 dictados (texto + fecha)
-├── config.json         # ajustes
-└── whisperflow.log     # diagnóstico
+├── history.json        # the last 50 dictations (text + date)
+├── config.json         # settings
+└── whisperflow.log     # diagnostics
 ```
 
-- **Clic en el icono** → panel *Historial*: cada dictado es una tarjeta con su
-  botón **Copiar**, el texto es seleccionable (⌘C también funciona) y un botón
-  **Copiar todo**.
-- **Exportar** guarda todo como Markdown fechado, para archivar o versionar.
-- **Clic derecho → Abrir carpeta de datos** lleva a esos archivos en Finder.
-- El historial son los últimos 50, no crece sin límite.
+- **Click the icon** → *History* panel: each dictation is a card with its own
+  **Copy** button, the text is selectable (⌘C works too) and there is a
+  **Copy all** button.
+- **Export** saves everything as dated Markdown, for archiving or versioning.
+- **Right click → Open data folder** opens those files in Finder.
+- The history holds the last 50 entries; it never grows without bound.
 
-> El portapapeles es del sistema: si copiás algo del historial y después pegás en
-> cualquier app, es eso mismo lo que aparece. Ninguna otra parte de la app lo
-> sobrescribe.
+> The clipboard belongs to the system: if you copy something from the history and
+> then paste anywhere, that is exactly what appears. No other part of the app
+> overwrites it.
 
-## Limpieza del texto (opcional)
+## Text cleanup (optional)
 
-Clic derecho → **Limpieza del texto**:
+Right click → **Text cleanup**:
 
-| Modo | Latencia | Qué hace |
+| Mode | Latency | What it does |
 |---|---|---|
-| Desactivada | 0 | Texto crudo de Whisper (ya trae puntuación). |
-| **Reglas** | ~0 ms | Quita `eh/um/mmm`, arregla espacios y mayúsculas, punto final. Nunca cambia el sentido. |
-| **IA local** | +4-5 s | LLM local: reescribe puntuación, quita `pues` y `o sea`, separa oraciones. Conserva números y vocabulario técnico. |
+| Off | 0 | Raw Whisper output (it already includes punctuation). |
+| **Rules** | ~0 ms | Drops `eh/um/mmm`, fixes spacing and capitalisation, adds the final period. Never changes meaning. |
+| **Local AI** | +4-5 s | Local LLM: rewrites punctuation, drops filler words, splits sentences. Keeps numbers and technical vocabulary. |
 
-La IA no corre en dictados de menos de `postProcessMinWords` palabras (12 por
-defecto): en comandos cortos la latencia pesa más que la limpieza.
+The AI is skipped for dictations shorter than `postProcessMinWords` words (12 by
+default): on short commands latency matters more than polish.
 
-Probado con `Qwen2.5-3B-Instruct-Q4_K_M`. Para cambiarlo, apunta `llmModelPath`
-a otro `.gguf` y reinicia.
+Tested with `Qwen2.5-3B-Instruct-Q4_K_M`. To swap it, point `llmModelPath` at
+another `.gguf` and restart.
 
-> **Por qué no Apple Intelligence:** en macOS 26 el framework
-> `FoundationModels` existe, pero en esta máquina el modelo on-device está
-> desactivado (`appleIntelligenceNotEnabled`) y en la región no está disponible.
-> El código lo intenta primero y, si está, lo usa (es más rápido que llama.cpp).
-> Si no, cae a llama.cpp.
+> **Why not Apple Intelligence:** on macOS 26 the `FoundationModels` framework
+> exists, but on this machine the on-device model is disabled
+> (`appleIntelligenceNotEnabled`) and it isn't available in the region. The code
+> tries it first and uses it when present (it's faster than llama.cpp); otherwise
+> it falls back to llama.cpp.
 
-## Configuración
+## Configuration
 
 `~/Library/Application Support/WhisperFlow/config.json`
 
-| Clave | Default | Notas |
+| Key | Default | Notes |
 |---|---|---|
-| `language` | `"es"` | `"es"`, `"en"` o `"auto"`. `auto` cuesta ~1.5 s extra. |
-| `modelPath` | `models/ggml-large-v3-turbo-q5_0.bin` | Voz. |
-| `postProcess` | `false` | Interruptor de limpieza (el menú lo cambia en vivo). |
-| `postProcessEngine` | `"rules"` | `"rules"` o `"llm"`. |
-| `postProcessMinWords` | `12` | Mínimo de palabras para aplicar IA. |
-| `showOverlay` | `true` | Indicador flotante en pantalla. |
-| `llmModelPath` | `models/Qwen2.5-3B-Instruct-Q4_K_M.gguf` | Modelo de limpieza. |
-| `llmBinaryPath` | `vendor-llama/*/llama-completion` | Runtime de llama.cpp. |
-| `maxRecordSeconds` | `120` | Corta sola si te olvidas soltar. |
-| `soundsEnabled` | `true` | Tink al empezar, Pop al terminar. |
-| `autoInsert` | `true` | Si es `false`, solo llena el panel. |
+| `language` | `"en"` | `"en"`, `"es"` or `"auto"`. `auto` costs ~1.5 s extra. |
+| `modelPath` | `models/ggml-large-v3-turbo-q5_0.bin` | Speech model. |
+| `postProcess` | `false` | Cleanup switch (the menu toggles it live). |
+| `postProcessEngine` | `"rules"` | `"rules"` or `"llm"`. |
+| `postProcessMinWords` | `12` | Minimum words before the AI runs. |
+| `showOverlay` | `true` | Floating indicator on screen. |
+| `llmModelPath` | `models/Qwen2.5-3B-Instruct-Q4_K_M.gguf` | Cleanup model. |
+| `llmBinaryPath` | `vendor-llama/*/llama-completion` | llama.cpp runtime. |
+| `maxRecordSeconds` | `120` | Stops on its own if you forget to release. |
+| `soundsEnabled` | `true` | Tink on start, Pop on finish. |
+| `autoInsert` | `true` | When `false`, only fills the panel. |
 
-## Rendimiento medido (M4 Pro)
+## Measured performance (M4 Pro)
 
-| Etapa | Memoria | Tiempo |
+| Stage | Memory | Time |
 |---|---|---|
-| App en reposo | 21 MB | ~0% CPU |
-| Transcripción (`whisper-cli`) | pico 832 MB, luego libera | 2 s (audio 23 s) · 7 s (audio 46 s) |
-| Limpieza "reglas" | despreciable | <10 ms |
-| Limpieza "IA local" | pico ~2.5 GB, luego libera | ~4.5 s |
+| App at rest | 21 MB | ~0% CPU |
+| Transcription (`whisper-cli`) | 832 MB peak, then released | 2 s (23 s audio) · 7 s (46 s audio) |
+| "Rules" cleanup | negligible | <10 ms |
+| "Local AI" cleanup | ~2.5 GB peak, then released | ~4.5 s |
 
-El modelo de voz no queda residente: se carga y se libera en cada dictado. Esa es
-la razón de que en reposo sean 21 MB en vez de 900 MB.
+The speech model is not kept resident: it is loaded and released on every
+dictation. That's why idle memory is 21 MB instead of 900 MB.
 
-## Cuándo no funciona la inserción automática
+## When automatic insertion doesn't work
 
-- Campos con **secure input** (contraseñas, algunos bancos) — macOS lo bloquea.
-- Apps Electron/web que ignoran eventos Unicode → el fallback ⌘V lo cubre.
-- Si tampoco así entra, el texto queda **copiado al portapapeles** y la píldora
-  avisa `copiado al portapapeles` con un icono teal. No abre ninguna ventana: una
-  ventana emergente activaría WhisperFlow y el siguiente dictado caería dentro de
-  ella en vez de en tu app.
+- Fields with **secure input** (passwords, some banks) — macOS blocks it.
+- Electron/web apps that ignore Unicode events → the ⌘V fallback covers it.
+- If that fails too, the text is **copied to the clipboard** and the pill says
+  `copied to clipboard` with a teal icon. No window opens: a popup would activate
+  WhisperFlow, and the next dictation would land inside it instead of your app.
 
-## Desarrollo
+## Development
 
-El hotkey vive en un `CGEventTap` de bajo nivel. Regla de oro: **nunca hacer
-trabajo pesado dentro del callback** — si tarda más de ~1 s, macOS deshabilita el
-tap (`tapDisabledByTimeout`) y el atajo muere hasta reiniciar. Por eso todo se
-despacha a la cola principal y hay un watchdog que reinstala el tap cada 15 s.
+The hotkey lives in a low-level `CGEventTap`. Golden rule: **never do heavy work
+inside the callback** — if it takes more than ~1 s, macOS disables the tap
+(`tapDisabledByTimeout`) and the shortcut stays dead until restart. That's why
+everything is dispatched to the main queue, and why a watchdog reinstalls the tap
+every 15 s.
 
 ```bash
-./build.sh                    # compila y firma
-open build/WhisperFlow.app    # corre
-tail -f ~/Library/Application\ Support/WhisperFlow/whisperflow.log   # diagnóstico
+./build.sh                    # build and sign
+open build/WhisperFlow.app    # run
+tail -f ~/Library/Application\ Support/WhisperFlow/whisperflow.log   # diagnostics
 ```
 
-## Desinstalar
+Useful flags for development:
+
+```bash
+./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --show-window          # open the main window
+./build/WhisperFlow.app/Contents/MacOS/WhisperFlow --show-window --section dictionary
+```
+
+## Uninstall
 
 ```bash
 rm -rf ~/Library/Application\ Support/WhisperFlow
 rm -rf build/WhisperFlow.app
 ```
 
-Y quita el permiso de Accesibilidad en Ajustes.
+And remove the Accessibility permission in Settings.

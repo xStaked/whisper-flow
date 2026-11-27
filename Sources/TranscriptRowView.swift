@@ -55,7 +55,7 @@ final class TranscriptRowView: NSView {
         timeLabel.textColor = .tertiaryLabelColor
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        copyButton.title = "Copiar"
+        copyButton.title = "Copy"
         copyButton.bezelStyle = .inline
         copyButton.isBordered = false
         copyButton.controlSize = .small
@@ -118,10 +118,10 @@ final class TranscriptRowView: NSView {
     }
 
     private func flashCopied() {
-        copyButton.title = "✓ Copiado"
+        copyButton.title = "✓ Copied"
         copyButton.contentTintColor = .systemGreen
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
-            self?.copyButton.title = "Copiar"
+            self?.copyButton.title = "Copy"
             self?.copyButton.contentTintColor = .secondaryLabelColor
         }
     }

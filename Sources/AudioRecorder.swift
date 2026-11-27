@@ -9,11 +9,11 @@ enum RecorderError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noInputDevice:
-            return "No se detectó ningún micrófono."
+            return "No microphone was detected."
         case .permissionDenied:
-            return "Falta el permiso de micrófono (Ajustes del Sistema → Privacidad y seguridad → Micrófono)."
+            return "Microphone permission missing (System Settings → Privacy & Security → Microphone)."
         case .couldNotWriteFile:
-            return "No se pudo guardar el audio temporal."
+            return "Could not save the temporary audio."
         }
     }
 }
@@ -89,7 +89,7 @@ final class AudioRecorder {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw RecorderError.noInputDevice }
 
-        Diagnostics.log("audio: \(Int(format.sampleRate)) Hz · \(format.channelCount) canal(es)")
+        Diagnostics.log("audio: \(Int(format.sampleRate)) Hz · \(format.channelCount) channel(s)")
         startedAt = Date()
         sampleRate = format.sampleRate
         lock.lock()
@@ -125,16 +125,16 @@ final class AudioRecorder {
             // recording there meant Bluetooth mics could never record anything.
             let age = Date().timeIntervalSince(self.startedAt)
             if age < 2.0 {
-                Diagnostics.log("audio: reconfiguración de arranque ignorada (\(String(format: "%.2f", age))s)")
+                Diagnostics.log("audio: startup reconfiguration ignored (\(String(format: "%.2f", age))s)")
                 if !engine.isRunning {
                     do { try engine.start() } catch {
-                        Diagnostics.log("audio: no se pudo reanudar — \(error.localizedDescription)")
+                        Diagnostics.log("audio: could not resume — \(error.localizedDescription)")
                     }
                 }
                 return
             }
 
-            Diagnostics.log("audio: cambió el dispositivo a mitad de grabación, cerrando")
+            Diagnostics.log("audio: device changed mid-recording, closing")
             self.onAutoStop?()
         }
 
@@ -142,13 +142,13 @@ final class AudioRecorder {
         // Check that buffers are actually flowing and reinstall the tap if not.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             guard let self, self.isRecording, self.lastBufferAt == nil else { return }
-            Diagnostics.log("audio: no llegaron muestras, reinstalando el tap")
+            Diagnostics.log("audio: no samples arrived, reinstalling the tap")
             self.reinstallTap()
         }
 
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isRecording else { return }
-            Diagnostics.log("audio: límite de \(Int(maxSeconds))s alcanzado")
+            Diagnostics.log("audio: \(Int(maxSeconds))s limit reached")
             self.onAutoStop?()
         }
         autoStopWork = work
@@ -182,7 +182,7 @@ final class AudioRecorder {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            Diagnostics.log("audio: el dispositivo no reporta formato válido")
+            Diagnostics.log("audio: device reports no valid format")
             return
         }
 
@@ -197,10 +197,10 @@ final class AudioRecorder {
         }
         if !engine.isRunning {
             do { try engine.start() } catch {
-                Diagnostics.log("audio: no se pudo reanudar — \(error.localizedDescription)")
+                Diagnostics.log("audio: could not resume — \(error.localizedDescription)")
             }
         }
-        Diagnostics.log("audio: tap reinstalado a \(Int(format.sampleRate)) Hz")
+        Diagnostics.log("audio: tap reinstalled at \(Int(format.sampleRate)) Hz")
     }
 
     private func finish() {

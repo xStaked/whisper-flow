@@ -37,15 +37,15 @@ final class TextInserter {
 
         // If one of our own windows is key, keystrokes would land in our app.
         if NSApp.isActive {
-            Diagnostics.log("inserción: la app estaba activa, cediendo el foco")
+            Diagnostics.log("insertion: app was active, yielding focus")
             NSApp.hide(nil)
             usleep(150_000)
         }
 
         let destination = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "desconocida"
         let before = caretState()
-        Diagnostics.log("inserción: foco=[\(focusDescription())] appActiva=\(NSApp.isActive)")
-        Diagnostics.log("inserción: destino=\(destination) caret=\(before?.caret.map(String.init) ?? "-") valor=\(before?.valueLength.map(String.init) ?? "-")")
+        Diagnostics.log("insertion: focus=[\(focusDescription())] appActive=\(NSApp.isActive)")
+        Diagnostics.log("insertion: target=\(destination) caret=\(before?.caret.map(String.init) ?? "-") value=\(before?.valueLength.map(String.init) ?? "-")")
 
         // 1. Atomic paste. Synthetic unicode typing only ever delivers its first
         //    chunk on macOS 26 (the rest gets swallowed), so a single ⌘V is the only
@@ -57,11 +57,11 @@ final class TextInserter {
         // Web views often report a constant placeholder length (1, 14...) through
         // AX. That is not a usable signal, so treat it as "cannot verify".
         guard let before, let readable = before.valueLength, readable > 2 else {
-            Diagnostics.log("inserción: AX no reporta el texto real (\(before?.valueLength.map(String.init) ?? "nil")), se asume éxito tras ⌘V")
+            Diagnostics.log("insertion: AX does not report real text (\(before?.valueLength.map(String.init) ?? "nil")), assuming ⌘V worked")
             return true
         }
         if waitForValueChange(from: before) {
-            Diagnostics.log("inserción: verificada con ⌘V")
+            Diagnostics.log("insertion: verified with ⌘V")
             return true
         }
 

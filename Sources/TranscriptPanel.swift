@@ -59,7 +59,7 @@ final class TranscriptPanelController: NSObject {
             backing: .buffered,
             defer: false
         )
-        panel.title = "Historial"
+        panel.title = "History"
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         panel.level = .floating
@@ -76,7 +76,7 @@ final class TranscriptPanelController: NSObject {
         effect.state = .active
 
         // Header
-        let header = NSTextField(labelWithString: "Historial")
+        let header = NSTextField(labelWithString: "History")
         header.font = .systemFont(ofSize: 15, weight: .semibold)
         header.translatesAutoresizingMaskIntoConstraints = false
 
@@ -111,18 +111,18 @@ final class TranscriptPanelController: NSObject {
         effect.addSubview(empty)
 
         // Footer
-        let copyAll = NSButton(title: "Copiar todo", target: self, action: #selector(copyAll))
+        let copyAll = NSButton(title: "Copy all", target: self, action: #selector(copyAll))
         copyAll.bezelStyle = .rounded
         copyAll.controlSize = .small
         copyAll.translatesAutoresizingMaskIntoConstraints = false
 
-        let export = NSButton(title: "Exportar", target: self, action: #selector(exportHistory))
+        let export = NSButton(title: "Export", target: self, action: #selector(exportHistory))
         export.bezelStyle = .rounded
         export.controlSize = .small
         export.translatesAutoresizingMaskIntoConstraints = false
         export.toolTip = "Guardar todos los dictados como archivo Markdown"
 
-        let clear = NSButton(title: "Borrar", target: self, action: #selector(clearHistory))
+        let clear = NSButton(title: "Delete", target: self, action: #selector(clearHistory))
         clear.bezelStyle = .rounded
         clear.controlSize = .small
         clear.translatesAutoresizingMaskIntoConstraints = false
@@ -190,13 +190,13 @@ final class TranscriptPanelController: NSObject {
         icon.contentTintColor = .tertiaryLabelColor
         icon.translatesAutoresizingMaskIntoConstraints = false
 
-        let title = NSTextField(labelWithString: "Todavía no hay dictados")
+        let title = NSTextField(labelWithString: "No dictations yet")
         title.font = .systemFont(ofSize: 13, weight: .medium)
         title.textColor = .secondaryLabelColor
         title.alignment = .center
         title.translatesAutoresizingMaskIntoConstraints = false
 
-        let hint = NSTextField(wrappingLabelWithString: "Mantené presionada la tecla fn, hablá, y soltá.")
+        let hint = NSTextField(wrappingLabelWithString: "Hold the fn key, speak, and release.")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .tertiaryLabelColor
         hint.alignment = .center
@@ -278,7 +278,7 @@ final class TranscriptPanelController: NSObject {
     @objc private func exportHistory() {
         guard let store else { return }
         let panel = NSSavePanel()
-        panel.title = "Exportar historial"
+        panel.title = "Export history"
         panel.nameFieldStringValue = "dictados.md"
         panel.allowedContentTypes = [.plainText]
         panel.canCreateDirectories = true
@@ -289,10 +289,10 @@ final class TranscriptPanelController: NSObject {
 
         do {
             try store.exportMarkdown().write(to: url, atomically: true, encoding: .utf8)
-            Diagnostics.log("historial exportado a \(url.path)")
+            Diagnostics.log("history exported to \(url.path)")
         } catch {
             let alert = NSAlert()
-            alert.messageText = "No se pudo exportar"
+            alert.messageText = "Export failed"
             alert.informativeText = error.localizedDescription
             alert.runModal()
         }
@@ -300,10 +300,10 @@ final class TranscriptPanelController: NSObject {
 
     @objc private func clearHistory() {
         let alert = NSAlert()
-        alert.messageText = "¿Borrar todo el historial?"
-        alert.informativeText = "Se eliminan los \(store?.entries.count ?? 0) dictados guardados. No se puede deshacer."
-        alert.addButton(withTitle: "Borrar")
-        alert.addButton(withTitle: "Cancelar")
+        alert.messageText = "Delete the whole history?"
+        alert.informativeText = "This deletes all \(store?.entries.count ?? 0) saved dictations. It cannot be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 

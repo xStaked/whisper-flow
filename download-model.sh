@@ -11,13 +11,13 @@ DEST="$ROOT/models/$MODEL"
 mkdir -p "$ROOT/models"
 
 if [[ -f "$DEST" ]]; then
-    echo "Ya existe: $DEST"
+    echo "Already present: $DEST"
     exit 0
 fi
 
-echo "Descargando $MODEL (~547 MB si es turbo q5_0)..."
+echo "Downloading $MODEL (~547 MB for turbo q5_0)..."
 curl -L --fail --retry 3 --progress-bar \
     -o "$DEST" \
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$MODEL"
 
-echo "Listo: $DEST"
+echo "Done: $DEST"

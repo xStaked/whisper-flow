@@ -40,16 +40,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config = Locator.loadOrDefault()
         Locator.save(config)
 
-        Diagnostics.log("--- WhisperFlow arrancó ---")
+        Diagnostics.log("--- WhisperFlow started ---")
         Diagnostics.log("accesibilidad concedida: \(AXIsProcessTrusted())")
-        Diagnostics.log("micrófono: \(AudioRecorder.permissionStatusDescription)")
+        Diagnostics.log("microphone: \(AudioRecorder.permissionStatusDescription)")
         Diagnostics.log("modelo: \(config.modelPath)")
         Diagnostics.log("whisper-cli: \(config.whisperBinaryPath)")
         Diagnostics.log("ffmpeg: \(config.ffmpegPath)")
-        Diagnostics.log("idioma: \(config.language)")
+        Diagnostics.log("language: \(config.language)")
 
         store = TranscriptStore()
-        Diagnostics.log("historial: \(store.fileURL.path)")
+        Diagnostics.log("history: \(store.fileURL.path)")
         transcriber = Transcriber(config: config)
 
         setupStatusItem()
@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 let hasVisibleWindow = NSApp.windows.contains { $0.isVisible }
                 if NSApp.isActive, !hasVisibleWindow {
-                    Diagnostics.log("arranque: quedé activa sin ventanas, cediendo el foco")
+                    Diagnostics.log("startup: active with no windows, yielding focus")
                     NSApp.hide(nil)
                 }
             }
@@ -90,17 +90,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyHealthTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             guard let self, AXIsProcessTrusted() else { return }
             if !self.monitor.isRunning {
-                Diagnostics.log("salud: tap ausente, reinstalando")
+                Diagnostics.log("health: tap missing, reinstalling")
                 self.monitor.start()
                 self.setState(.idle)
             } else if !self.monitor.isEnabled {
-                Diagnostics.log("salud: tap deshabilitado, reactivando")
+                Diagnostics.log("health: tap disabled, re-enabling")
                 self.monitor.reenable()
             }
 
-            // La píldora no puede quedarse animando si no hay grabación real.
+            // The pill must never keep animating when there is no real recording.
             if self.hud.isShowingRecording, !self.recorder.isRecording, !self.startInFlight {
-                Diagnostics.log("salud: píldora grabando sin grabación, se oculta")
+                Diagnostics.log("health: pill recording without a recording, hiding")
                 self.hud.hide()
                 self.setState(.idle)
             }
@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.toolTip = "WhisperFlow — mantén fn y habla"
+        button.toolTip = "WhisperFlow — hold fn and speak"
     }
 
     @objc private func statusItemClicked(_ sender: Any?) {
@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Without Accessibility there is no hotkey and no typing — make that loud.
         guard AXIsProcessTrusted() else {
-            Diagnostics.log("clic: falta accesibilidad, abriendo ajustes")
+            Diagnostics.log("click: accessibility missing, opening settings")
             _ = TextInserter.accessibilityTrusted(prompt: true)
             openAccessibilitySettings()
             scheduleAccessibilityRetry()
@@ -160,10 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Historial de dictados", action: #selector(openPanel), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Re-insertar último dictado", action: #selector(reinsertLast), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Abrir permisos", action: #selector(openSetup), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Abrir carpeta de datos", action: #selector(openConfigFolder), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Dictation history", action: #selector(openPanel), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Re-insert last dictation", action: #selector(reinsertLast), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Open permissions", action: #selector(openSetup), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Open data folder", action: #selector(openConfigFolder), keyEquivalent: "").target = self
 
         menu.addItem(NSMenuItem.separator())
         let cleanupHeader = NSMenuItem(title: "Limpieza del texto", action: nil, keyEquivalent: "")
@@ -175,12 +175,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         offItem.state = config.postProcess ? .off : .on
         menu.addItem(offItem)
 
-        let rulesItem = NSMenuItem(title: "Reglas (instantáneo)", action: #selector(setCleanupRules), keyEquivalent: "")
+        let rulesItem = NSMenuItem(title: "Rules (instant)", action: #selector(setCleanupRules), keyEquivalent: "")
         rulesItem.target = self
         rulesItem.state = (config.postProcess && config.postProcessEngine.lowercased() != "llm") ? .on : .off
         menu.addItem(rulesItem)
 
-        let llmItem = NSMenuItem(title: "IA local (+4s)", action: #selector(setCleanupLLM), keyEquivalent: "")
+        let llmItem = NSMenuItem(title: "Local AI (+4s)", action: #selector(setCleanupLLM), keyEquivalent: "")
         llmItem.target = self
         llmItem.state = (config.postProcess && config.postProcessEngine.lowercased() == "llm") ? .on : .off
         menu.addItem(llmItem)
@@ -190,9 +190,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hudItem.target = self
         hudItem.state = config.showOverlay ? .on : .off
         menu.addItem(hudItem)
-        menu.addItem(withTitle: "Ver log de diagnóstico", action: #selector(openLog), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Open diagnostic log", action: #selector(openLog), keyEquivalent: "").target = self
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "Salir de WhisperFlow", action: #selector(quit), keyEquivalent: "q").target = self
+        menu.addItem(withTitle: "Quit WhisperFlow", action: #selector(quit), keyEquivalent: "q").target = self
 
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
@@ -207,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let inserted = inserter.insert(text)
-        Diagnostics.log("reinsertar: \(inserted ? "verificada" : "falló")")
+        Diagnostics.log("reinsert: \(inserted ? "verified" : "failed")")
         if !inserted {
             inserter.copyToClipboard(text)
             if config.showOverlay { hud.showCopied() }
@@ -241,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config.postProcess = enabled
         config.postProcessEngine = engine
         Locator.save(config)
-        Diagnostics.log("config: limpieza = \(enabled ? engine : "off")")
+        Diagnostics.log("config: cleanup = \(enabled ? engine : "off")")
     }
 
     @objc private func openSetup() {
@@ -308,15 +308,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard AudioRecorder.permissionGranted else {
-            Diagnostics.log("onPress: sin permiso de micrófono")
+            Diagnostics.log("onPress: no microphone permission")
             AudioRecorder.requestPermission { [weak self] granted in
                 guard let self else { return }
                 if granted {
                     self.beginRecording()
                 } else {
                     self.presentPermissionAlert(
-                        title: "Falta el micrófono",
-                        message: "Dale permiso de micrófono a WhisperFlow en Ajustes del Sistema → Privacidad y seguridad → Micrófono."
+                        title: "Microphone permission missing",
+                        message: "Grant WhisperFlow microphone access in System Settings → Privacy & Security → Microphone."
                     )
                 }
             }
@@ -332,14 +332,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             // A device that just appeared/disappeared is usually ready a moment
             // later; one short retry avoids losing the dictation.
-            Diagnostics.log("grabación: primer intento falló (\(error.localizedDescription)), reintentando")
+            Diagnostics.log("recording: first attempt failed (\(error.localizedDescription)), retrying")
             usleep(250_000)
             do {
                 try recorder.start(maxSeconds: maxSeconds)
             } catch {
                 startInFlight = false
                 pendingAction = .none
-                Diagnostics.log("grabación: error \(error.localizedDescription)")
+                Diagnostics.log("recording: error \(error.localizedDescription)")
                 NSSound.beep()
                 setState(.idle)
                 hud.hide()
@@ -354,16 +354,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch pendingAction {
         case .cancel:
             pendingAction = .none
-            Diagnostics.log("grabación: fn se soltó durante el arranque, se descarta")
+            Diagnostics.log("recording: fn released during startup, discarding")
             recorder.cancel()
             setState(.idle)
             hud.hide()
         case .stop:
             pendingAction = .none
-            Diagnostics.log("grabación: fn se soltó durante el arranque, se cierra ya")
+            Diagnostics.log("recording: fn released during startup, closing now")
             finishRecording()
         case .none:
-            Diagnostics.log("grabación: empezó")
+            Diagnostics.log("recording: started")
             if config.showOverlay { hud.showRecording() }
             playSound("Tink")
             setState(.recording)
@@ -373,24 +373,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishRecording() {
         if startInFlight {
             pendingAction = .stop
-            Diagnostics.log("onRelease: el arranque seguía en curso, se cerrará al terminar")
+            Diagnostics.log("onRelease: startup still in flight, will close when it finishes")
             return
         }
 
         guard recorder.isRecording else {
-            Diagnostics.log("onRelease: no había grabación activa")
+            Diagnostics.log("onRelease: no active recording")
             return
         }
 
         guard let capture = recorder.stop() else {
-            Diagnostics.log("onRelease: el audio quedó vacío")
+            Diagnostics.log("onRelease: captured audio was empty")
             setState(.idle)
             return
         }
 
         playSound("Pop")
         if config.showOverlay { hud.showTranscribing() }
-        Diagnostics.log("grabación: terminó (\(String(format: "%.1f", capture.durationSeconds))s), transcribiendo")
+        Diagnostics.log("recording: finished (\(String(format: "%.1f", capture.durationSeconds))s), transcribing")
         setState(.transcribing)
         isBusy = true
         startWatchdog()
@@ -414,7 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 DispatchQueue.main.async {
                     guard let self else { return }
-                    Diagnostics.log("transcripción: error \(error.localizedDescription)")
+                    Diagnostics.log("transcription: error \(error.localizedDescription)")
                     self.isBusy = false
                     self.setState(.idle)
                     self.presentError(error)
@@ -437,7 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cancelRecording() {
         if startInFlight {
             pendingAction = .cancel
-            Diagnostics.log("onCancel: el arranque seguía en curso, se descartará")
+            Diagnostics.log("onCancel: startup still in flight, will discard")
             return
         }
 
@@ -455,16 +455,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Short commands are already fine and latency matters more there.
         let words = raw.split(whereSeparator: { $0.isWhitespace }).count
         guard words >= config.postProcessMinWords else {
-            Diagnostics.log("llm: \(words) palabras (< \(config.postProcessMinWords)), se deja crudo")
+            Diagnostics.log("llm: \(words) words (< \(config.postProcessMinWords)), leaving raw")
             return raw
         }
 
         if config.postProcessEngine.lowercased() == "llm" {
             guard let cleaned = PostProcessor.clean(raw, config: config) else {
-                Diagnostics.log("llm: sin limpieza, uso texto crudo")
+                Diagnostics.log("llm: no cleanup, using raw text")
                 return raw
             }
-            Diagnostics.log("llm: texto limpio (\(raw.count) -> \(cleaned.count) chars)")
+            Diagnostics.log("llm: cleaned text (\(raw.count) -> \(cleaned.count) chars)")
             return cleaned
         }
 
@@ -475,15 +475,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliver(_ text: String) {
-        Diagnostics.log("texto: \(text)")
+        Diagnostics.log("text: \(text)")
         store.add(text)
 
         var inserted = false
         if config.autoInsert {
             inserted = inserter.insert(text)
-            Diagnostics.log("inserción: \(inserted ? "verificada" : "NO verificada")")
+            Diagnostics.log("insertion: \(inserted ? "verified" : "NOT verified")")
         } else {
-            Diagnostics.log("inserción: desactivada (autoInsert=false)")
+            Diagnostics.log("insertion: disabled (autoInsert=false)")
         }
 
         isBusy = false
@@ -502,7 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Never open a window here: activating would steal focus and the next
             // dictation would be typed into our own app instead of yours.
             inserter.copyToClipboard(text)
-            Diagnostics.log("inserción fallida: texto copiado al portapapeles")
+            Diagnostics.log("insertion failed: text copied to the clipboard")
             if config.showOverlay { hud.showCopied() }
         }
     }
@@ -516,10 +516,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .idle:
             if AXIsProcessTrusted() {
                 button.image = Self.symbol("mic", tint: nil)
-                button.toolTip = "WhisperFlow — mantén fn y habla"
+                button.toolTip = "WhisperFlow — hold fn and speak"
             } else {
                 button.image = Self.symbol("mic.slash", tint: nil)
-                button.toolTip = "WhisperFlow — falta el permiso de Accesibilidad (haz clic)"
+                button.toolTip = "WhisperFlow — Accessibility permission missing (click)"
             }
         case .recording:
             button.image = Self.symbol("mic.fill", tint: .systemRed)
@@ -558,8 +558,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "Abrir Ajustes")
-        alert.addButton(withTitle: "Ahora no")
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Not now")
         if alert.runModal() == .alertFirstButtonReturn {
             let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
             NSWorkspace.shared.open(url)

@@ -80,7 +80,7 @@ final class MainWindowController: NSObject {
         sidebarStack.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(sidebarStack)
 
-        let footerLabel = NSTextField(labelWithString: "Mantené fn y hablá")
+        let footerLabel = NSTextField(labelWithString: "Hold fn and speak")
         footerLabel.font = Theme.caption(10.5)
         footerLabel.textColor = Theme.tertiaryText
         footerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -90,7 +90,7 @@ final class MainWindowController: NSObject {
         let content = NSView()
         content.translatesAutoresizingMaskIntoConstraints = false
 
-        let greeting = NSTextField(labelWithString: "Tus dictados")
+        let greeting = NSTextField(labelWithString: "Your dictations")
         greeting.font = Theme.title(24)
         greeting.textColor = Theme.primaryText
         greeting.translatesAutoresizingMaskIntoConstraints = false
@@ -101,7 +101,7 @@ final class MainWindowController: NSObject {
         subtitle.translatesAutoresizingMaskIntoConstraints = false
 
         let search = NSSearchField()
-        search.placeholderString = "Buscar dictados"
+        search.placeholderString = "Search dictations"
         search.translatesAutoresizingMaskIntoConstraints = false
         search.target = self
         search.action = #selector(searchChanged)
@@ -194,8 +194,8 @@ final class MainWindowController: NSObject {
         for (id, title, symbol) in [
             ("home", "Home", "square.grid.2x2"),
             ("insights", "Insights", "chart.bar"),
-            ("dictionary", "Diccionario", "book"),
-            ("settings", "Ajustes", "gearshape"),
+            ("dictionary", "Dictionary", "book"),
+            ("settings", "Settings", "gearshape"),
         ] {
             let item = SidebarItemView(identifier: id, title: title, symbol: symbol)
             item.onClick { [weak self] in self?.selectSection(id) }
@@ -268,10 +268,10 @@ final class MainWindowController: NSObject {
 
         if currentSection == "home" || currentSection == "insights" {
             if let statsStack {
-                statsStack.addArrangedSubview(makeStat(value: "\(words)", label: "palabras"))
-                statsStack.addArrangedSubview(makeStat(value: "\(store.entries.count)", label: "dictados"))
-                statsStack.addArrangedSubview(makeStat(value: "\(avgWords)", label: "palabras/dictado"))
-                statsStack.addArrangedSubview(makeStat(value: "\(days)", label: "días activos"))
+                statsStack.addArrangedSubview(makeStat(value: "\(words)", label: "words"))
+                statsStack.addArrangedSubview(makeStat(value: "\(store.entries.count)", label: "dictations"))
+                statsStack.addArrangedSubview(makeStat(value: "\(avgWords)", label: "words/dict."))
+                statsStack.addArrangedSubview(makeStat(value: "\(days)", label: "active days"))
             }
         }
 
@@ -280,13 +280,13 @@ final class MainWindowController: NSObject {
         case "home":
             greetingLabel?.stringValue = timeGreeting()
         case "insights":
-            greetingLabel?.stringValue = "Tus números"
+            greetingLabel?.stringValue = "Your numbers"
         case "dictionary":
-            greetingLabel?.stringValue = "Palabras que usás"
+            greetingLabel?.stringValue = "Words you use"
         case "settings":
-            greetingLabel?.stringValue = "Ajustes"
+            greetingLabel?.stringValue = "Settings"
         default:
-            greetingLabel?.stringValue = "Tus dictados"
+            greetingLabel?.stringValue = "Your dictations"
         }
 
         // Rows
@@ -376,7 +376,7 @@ final class MainWindowController: NSObject {
     }
 
     private func buildDictionary(into stack: NSStackView, store: TranscriptStore) {
-        // Muletillas y palabras vacías: no aportan nada a un "diccionario" personal.
+        // Filler and stop words: they add nothing to a personal "dictionary".
         let stopWords: Set<String> = [
             "de", "la", "el", "que", "y", "en", "un", "a", "los", "se", "no", "con", "es",
             "por", "para", "lo", "una", "me", "si", "mi", "pero", "como", "porque", "pues",
@@ -399,7 +399,7 @@ final class MainWindowController: NSObject {
         let top = counts.sorted { $0.value > $1.value }.prefix(30)
 
         guard !top.isEmpty else {
-            let hint = NSTextField(wrappingLabelWithString: "Dictá algo y acá aparecen las palabras que más usás.")
+            let hint = NSTextField(wrappingLabelWithString: "Dictate something and the words you use most show up here.")
             hint.font = Theme.body(12)
             hint.textColor = Theme.secondaryText
             stack.addArrangedSubview(hint)
@@ -444,11 +444,11 @@ final class MainWindowController: NSObject {
 
     private func buildSettings(into stack: NSStackView) {
         let hint = NSTextField(wrappingLabelWithString: """
-        Los ajustes de verdad viven en:
+        The real settings live in:
         ~/Library/Application Support/WhisperFlow/config.json
 
-        Idioma, modelo de voz, limpieza del texto y sonidos se cambian ahí.
-        Clic derecho en el icono del menú → Abrir carpeta de datos.
+        Language, speech model, text cleanup and sounds are changed there.
+        Right click the menu icon → Open data folder.
         """)
         hint.font = Theme.body(12)
         hint.textColor = Theme.secondaryText
@@ -458,7 +458,7 @@ final class MainWindowController: NSObject {
     private func groupByDay(_ entries: [TranscriptEntry]) -> [(String, [TranscriptEntry])] {
         let calendar = Calendar.current
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "es")
+        formatter.locale = Locale(identifier: "en_US")
         formatter.dateFormat = "d 'de' MMMM, yyyy"
 
         var order: [Date] = []
@@ -475,9 +475,9 @@ final class MainWindowController: NSObject {
         return order.map { day in
             let label: String
             if day == today {
-                label = "Hoy"
+                label = "Today"
             } else if day == yesterday {
-                label = "Ayer"
+                label = "Yesterday"
             } else {
                 label = formatter.string(from: day)
             }
@@ -488,9 +488,9 @@ final class MainWindowController: NSObject {
     private func timeGreeting() -> String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 6..<12: return "Buen día"
-        case 12..<19: return "Buenas tardes"
-        default: return "Buenas noches"
+        case 6..<12: return "Good morning"
+        case 12..<19: return "Good afternoon"
+        default: return "Good evening"
         }
     }
 
@@ -503,14 +503,14 @@ final class MainWindowController: NSObject {
         icon.contentTintColor = Theme.tertiaryText
         icon.translatesAutoresizingMaskIntoConstraints = false
 
-        let title = NSTextField(labelWithString: "Tu primer dictado")
+        let title = NSTextField(labelWithString: "Your first dictation")
         title.font = .systemFont(ofSize: 15, weight: .medium)
         title.textColor = Theme.secondaryText
         title.alignment = .center
         title.translatesAutoresizingMaskIntoConstraints = false
 
         let hint = NSTextField(wrappingLabelWithString:
-            "Mantené presionada la tecla fn, hablá con naturalidad y soltá.\nEl texto aparece donde tengas el cursor.")
+            "Hold the fn key, speak naturally and release.\nThe text appears wherever your cursor is.")
         hint.font = Theme.body(12)
         hint.textColor = Theme.tertiaryText
         hint.alignment = .center
