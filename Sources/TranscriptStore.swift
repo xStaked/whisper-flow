@@ -26,6 +26,24 @@ final class TranscriptStore {
         save()
     }
 
+    /// Where the history actually lives, for the "open folder" menu item.
+    var fileURL: URL { Locator.historyURL }
+
+    /// Human-readable dump the user can keep, mail or version.
+    func exportMarkdown() -> String {
+        guard !entries.isEmpty else { return "# Historial de dictados\n\nTodavía no hay dictados.\n" }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+
+        var out = "# Historial de dictados\n\n"
+        out += "Exportado el \(formatter.string(from: Date())) · \(entries.count) dictados\n\n"
+        for entry in entries.reversed() {
+            out += "## \(formatter.string(from: entry.date))\n\n\(entry.text)\n\n---\n\n"
+        }
+        return out
+    }
+
     func clear() {
         entries.removeAll()
         save()

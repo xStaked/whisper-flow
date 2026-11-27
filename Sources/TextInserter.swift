@@ -15,11 +15,6 @@ import ApplicationServices
 /// treated as failure.
 final class TextInserter {
 
-    /// Every clipboard write bumps this. A pending "restore the old clipboard"
-    /// only fires if nobody wrote to the clipboard in the meantime — otherwise it
-    /// would silently roll back the text we had just copied for the user.
-    private var clipboardGeneration = 0
-
     private struct CaretState: Equatable {
         let caret: Int?
         let valueLength: Int?
@@ -77,38 +72,20 @@ final class TextInserter {
     }
 
     func copyToClipboard(_ text: String) {
-        _ = writeClipboard(text)
-    }
-
-    @discardableResult
-    private func writeClipboard(_ text: String) -> Int {
-        clipboardGeneration += 1
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        return clipboardGeneration
+        Clipboard.copy(text)
     }
 
     // MARK: Strategy 1 — clipboard paste
 
     private func pasteViaClipboard(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        let saved = pasteboard.string(forType: .string)
-        let generation = writeClipboard(text)
+        let saved = Clipboard.currentText()
+        Clipboard.writeTemporarily(text, restoring: saved, after: 1.5)
 
         // Give the pasteboard a beat to publish before the target asks for it.
         usleep(30_000)
-
         postCommandV()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            guard let self, self.clipboardGeneration == generation else { return }
-            guard pasteboard.string(forType: .string) == text, let saved else { return }
-            self.clipboardGeneration += 1
-            pasteboard.clearContents()
-            pasteboard.setString(saved, forType: .string)
-        }
     }
+
 
     private func postCommandV() {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }

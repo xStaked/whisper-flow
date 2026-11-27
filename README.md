@@ -135,6 +135,28 @@ Mientras dictás aparece una píldora abajo al centro (100 px sobre el Dock):
   así el texto siempre cae en la app correcta. Funciona en fullscreen y en todos los Spaces.
 - Se apaga en **clic derecho → Indicador en pantalla** (o `showOverlay: false`).
 
+## Dónde quedan tus textos
+
+Todo vive en una sola carpeta, fuera del repo:
+
+```
+~/Library/Application Support/WhisperFlow/
+├── history.json        # los últimos 50 dictados (texto + fecha)
+├── config.json         # ajustes
+└── whisperflow.log     # diagnóstico
+```
+
+- **Clic en el icono** → panel *Historial*: cada dictado es una tarjeta con su
+  botón **Copiar**, el texto es seleccionable (⌘C también funciona) y un botón
+  **Copiar todo**.
+- **Exportar** guarda todo como Markdown fechado, para archivar o versionar.
+- **Clic derecho → Abrir carpeta de datos** lleva a esos archivos en Finder.
+- El historial son los últimos 50, no crece sin límite.
+
+> El portapapeles es del sistema: si copiás algo del historial y después pegás en
+> cualquier app, es eso mismo lo que aparece. Ninguna otra parte de la app lo
+> sobrescribe.
+
 ## Limpieza del texto (opcional)
 
 Clic derecho → **Limpieza del texto**:

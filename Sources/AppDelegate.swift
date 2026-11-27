@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Diagnostics.log("idioma: \(config.language)")
 
         store = TranscriptStore()
+        Diagnostics.log("historial: \(store.fileURL.path)")
         transcriber = Transcriber(config: config)
 
         setupStatusItem()
@@ -149,10 +150,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Últimos dictados", action: #selector(openPanel), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Historial de dictados", action: #selector(openPanel), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Re-insertar último dictado", action: #selector(reinsertLast), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Abrir permisos", action: #selector(openSetup), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Abrir carpeta de configuración", action: #selector(openConfigFolder), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Abrir carpeta de datos", action: #selector(openConfigFolder), keyEquivalent: "").target = self
 
         menu.addItem(NSMenuItem.separator())
         let cleanupHeader = NSMenuItem(title: "Limpieza del texto", action: nil, keyEquivalent: "")
@@ -477,6 +478,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isBusy = false
         setState(.idle)
+        panel.refreshIfVisible()
 
         if config.showOverlay {
             if inserted {

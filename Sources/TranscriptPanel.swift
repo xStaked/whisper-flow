@@ -7,14 +7,17 @@ import AppKit
 final class TranscriptPanelController: NSObject {
     private var panel: NSPanel?
     private var stack: NSStackView?
-    private var emptyLabel: NSTextField?
+    private var emptyView: NSView?
     private var errorLabel: NSTextField?
-    private var copyButton: NSButton?
+    private var copyAllButton: NSButton?
+    private var clearButton: NSButton?
+    private var countLabel: NSTextField?
     private weak var store: TranscriptStore?
     private var pendingError: String?
 
     private let panelWidth: CGFloat = 400
-    private let rowWidth: CGFloat = 352
+    private let panelHeight: CGFloat = 520
+    private let rowWidth: CGFloat = 344
 
     func toggle(store: TranscriptStore) {
         if let panel, panel.isVisible {
@@ -38,18 +41,25 @@ final class TranscriptPanelController: NSObject {
         panel?.orderOut(nil)
     }
 
+    /// Called when a new dictation lands while the panel is open.
+    func refreshIfVisible() {
+        guard let panel, panel.isVisible, let store else { return }
+        self.store = store
+        rebuild()
+    }
+
     // MARK: - Panel construction
 
     private func ensurePanel() {
         guard panel == nil else { return }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: 480),
-            styleMask: [.titled, .closable, .nonactivatingPanel, .utilityWindow],
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
+            styleMask: [.titled, .closable, .nonactivatingPanel, .utilityWindow, .resizable],
             backing: .buffered,
             defer: false
         )
-        panel.title = "WhisperFlow"
+        panel.title = "Historial"
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         panel.level = .floating
@@ -58,15 +68,22 @@ final class TranscriptPanelController: NSObject {
         panel.becomesKeyOnlyIfNeeded = true
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.minSize = NSSize(width: 340, height: 300)
 
         let effect = NSVisualEffectView()
         effect.material = .popover
         effect.blendingMode = .behindWindow
         effect.state = .active
 
-        let header = NSTextField(labelWithString: "Últimos dictados")
-        header.font = .systemFont(ofSize: 13, weight: .semibold)
+        // Header
+        let header = NSTextField(labelWithString: "Historial")
+        header.font = .systemFont(ofSize: 15, weight: .semibold)
         header.translatesAutoresizingMaskIntoConstraints = false
+
+        let count = NSTextField(labelWithString: "")
+        count.font = .systemFont(ofSize: 11)
+        count.textColor = .secondaryLabelColor
+        count.translatesAutoresizingMaskIntoConstraints = false
 
         let error = NSTextField(wrappingLabelWithString: "")
         error.font = .systemFont(ofSize: 11)
@@ -74,6 +91,7 @@ final class TranscriptPanelController: NSObject {
         error.isHidden = true
         error.translatesAutoresizingMaskIntoConstraints = false
 
+        // List
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
@@ -83,56 +101,69 @@ final class TranscriptPanelController: NSObject {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 12, bottom: 12, right: 12)
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 2, left: 14, bottom: 12, right: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = stack
 
-        let empty = NSTextField(wrappingLabelWithString: "Todavía no dictaste nada.\nMantén fn y habla.")
-        empty.font = .systemFont(ofSize: 12)
-        empty.textColor = .secondaryLabelColor
-        empty.translatesAutoresizingMaskIntoConstraints = false
+        // Empty state
+        let empty = Self.makeEmptyState()
         effect.addSubview(empty)
 
-        let copy = NSButton(title: "Copiar último", target: self, action: #selector(copyLatest))
-        copy.bezelStyle = .rounded
-        copy.controlSize = .small
-        copy.translatesAutoresizingMaskIntoConstraints = false
+        // Footer
+        let copyAll = NSButton(title: "Copiar todo", target: self, action: #selector(copyAll))
+        copyAll.bezelStyle = .rounded
+        copyAll.controlSize = .small
+        copyAll.translatesAutoresizingMaskIntoConstraints = false
 
-        let clear = NSButton(title: "Borrar historial", target: self, action: #selector(clearHistory))
+        let export = NSButton(title: "Exportar", target: self, action: #selector(exportHistory))
+        export.bezelStyle = .rounded
+        export.controlSize = .small
+        export.translatesAutoresizingMaskIntoConstraints = false
+        export.toolTip = "Guardar todos los dictados como archivo Markdown"
+
+        let clear = NSButton(title: "Borrar", target: self, action: #selector(clearHistory))
         clear.bezelStyle = .rounded
         clear.controlSize = .small
         clear.translatesAutoresizingMaskIntoConstraints = false
 
         effect.addSubview(header)
+        effect.addSubview(count)
         effect.addSubview(error)
         effect.addSubview(scroll)
-        effect.addSubview(empty)
-        effect.addSubview(copy)
+        effect.addSubview(copyAll)
+        effect.addSubview(export)
         effect.addSubview(clear)
 
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: effect.topAnchor, constant: 14),
+            header.topAnchor.constraint(equalTo: effect.topAnchor, constant: 16),
             header.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 16),
 
-            error.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
+            count.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            count.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -16),
+
+            error.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
             error.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 16),
             error.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -16),
 
             scroll.topAnchor.constraint(equalTo: error.bottomAnchor, constant: 10),
-            scroll.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 4),
-            scroll.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -4),
-            scroll.bottomAnchor.constraint(equalTo: copy.topAnchor, constant: -10),
+            scroll.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 0),
+            scroll.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: 0),
+            scroll.bottomAnchor.constraint(equalTo: copyAll.topAnchor, constant: -8),
 
-            empty.topAnchor.constraint(equalTo: scroll.topAnchor, constant: 12),
-            empty.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 16),
-            empty.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -16),
+            empty.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),
+            empty.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 24),
+            empty.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -24),
 
-            copy.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 16),
-            copy.bottomAnchor.constraint(equalTo: effect.bottomAnchor, constant: -12),
+            copyAll.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 16),
+            copyAll.bottomAnchor.constraint(equalTo: effect.bottomAnchor, constant: -14),
 
             clear.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -16),
-            clear.centerYAnchor.constraint(equalTo: copy.centerYAnchor),
+            clear.centerYAnchor.constraint(equalTo: copyAll.centerYAnchor),
+
+            export.trailingAnchor.constraint(equalTo: clear.leadingAnchor, constant: -8),
+            export.centerYAnchor.constraint(equalTo: copyAll.centerYAnchor),
+            export.leadingAnchor.constraint(greaterThanOrEqualTo: copyAll.trailingAnchor, constant: 8),
 
             stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
@@ -143,9 +174,54 @@ final class TranscriptPanelController: NSObject {
 
         self.panel = panel
         self.stack = stack
-        self.emptyLabel = empty
+        self.emptyView = empty
         self.errorLabel = error
-        self.copyButton = copy
+        self.copyAllButton = copyAll
+        self.clearButton = clear
+        self.countLabel = count
+    }
+
+    private static func makeEmptyState() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName: "mic", accessibilityDescription: nil)
+        icon.contentTintColor = .tertiaryLabelColor
+        icon.translatesAutoresizingMaskIntoConstraints = false
+
+        let title = NSTextField(labelWithString: "Todavía no hay dictados")
+        title.font = .systemFont(ofSize: 13, weight: .medium)
+        title.textColor = .secondaryLabelColor
+        title.alignment = .center
+        title.translatesAutoresizingMaskIntoConstraints = false
+
+        let hint = NSTextField(wrappingLabelWithString: "Mantené presionada la tecla fn, hablá, y soltá.")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .tertiaryLabelColor
+        hint.alignment = .center
+        hint.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(icon)
+        container.addSubview(title)
+        container.addSubview(hint)
+
+        NSLayoutConstraint.activate([
+            icon.topAnchor.constraint(equalTo: container.topAnchor),
+            icon.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 26),
+            icon.heightAnchor.constraint(equalToConstant: 26),
+
+            title.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 12),
+            title.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            title.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+
+            hint.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 6),
+            hint.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hint.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hint.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
     }
 
     // MARK: - Content
@@ -167,15 +243,13 @@ final class TranscriptPanelController: NSObject {
         }
 
         let entries = Array(store.entries.prefix(20))
-        emptyLabel?.isHidden = !entries.isEmpty
-        copyButton?.isEnabled = !entries.isEmpty
+        emptyView?.isHidden = !entries.isEmpty
+        copyAllButton?.isEnabled = !entries.isEmpty
+        clearButton?.isEnabled = !entries.isEmpty
+        countLabel?.stringValue = entries.isEmpty ? "" : "\(entries.count) de \(store.entries.count)"
 
         for entry in entries {
-            let row = NSTextField(wrappingLabelWithString: entry.text)
-            row.font = .systemFont(ofSize: 12)
-            row.textColor = .labelColor
-            row.isSelectable = true
-            row.preferredMaxLayoutWidth = rowWidth
+            let row = TranscriptRowView(entry: entry)
             row.translatesAutoresizingMaskIntoConstraints = false
             row.widthAnchor.constraint(equalToConstant: rowWidth).isActive = true
             stack.addArrangedSubview(row)
@@ -194,20 +268,55 @@ final class TranscriptPanelController: NSObject {
 
     // MARK: - Actions
 
-    @objc private func copyLatest() {
-        guard let text = store?.entries.first?.text else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+    @objc private func copyAll() {
+        guard let store, !store.entries.isEmpty else { return }
+        let all = store.entries.map(\.text).joined(separator: "\n\n")
+        Clipboard.copy(all)
+        flash(copyAllButton, title: "✓ Copiado")
+    }
 
-        copyButton?.title = "Copiado ✓"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.copyButton?.title = "Copiar último"
+    @objc private func exportHistory() {
+        guard let store else { return }
+        let panel = NSSavePanel()
+        panel.title = "Exportar historial"
+        panel.nameFieldStringValue = "dictados.md"
+        panel.allowedContentTypes = [.plainText]
+        panel.canCreateDirectories = true
+
+        // The panel is shown from a non-activating window, so activate briefly.
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try store.exportMarkdown().write(to: url, atomically: true, encoding: .utf8)
+            Diagnostics.log("historial exportado a \(url.path)")
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "No se pudo exportar"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
         }
     }
 
     @objc private func clearHistory() {
+        let alert = NSAlert()
+        alert.messageText = "¿Borrar todo el historial?"
+        alert.informativeText = "Se eliminan los \(store?.entries.count ?? 0) dictados guardados. No se puede deshacer."
+        alert.addButton(withTitle: "Borrar")
+        alert.addButton(withTitle: "Cancelar")
+        alert.alertStyle = .warning
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
         store?.clear()
         rebuild()
+    }
+
+    private func flash(_ button: NSButton?, title: String) {
+        guard let button else { return }
+        let original = button.title
+        button.title = title
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            button.title = original
+        }
     }
 }
